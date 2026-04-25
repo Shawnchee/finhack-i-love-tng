@@ -10,6 +10,7 @@ import {
   Info,
   QrCode,
   Loader2,
+  Upload,
 } from "lucide-react";
 import jsQR from "jsqr";
 import { BrowserQRCodeReader } from "@zxing/browser";
@@ -87,6 +88,7 @@ export default function Check() {
     | { kind: "ok"; value: string }
     | { kind: "error"; message: string }
   >({ kind: "idle" });
+  const [isDraggingQr, setIsDraggingQr] = useState(false);
   const qrInputRef = useRef<HTMLInputElement | null>(null);
 
   const detected = useMemo(() => detectInput(smart), [smart]);
@@ -106,11 +108,14 @@ export default function Check() {
     qrInputRef.current?.click();
   };
 
-  const onQrFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-
+  const processQrFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setQrState({
+        kind: "error",
+        message: "That doesn't look like an image. Drop a PNG / JPG / HEIC.",
+      });
+      return;
+    }
     setQrState({ kind: "decoding" });
     try {
       const decoded = await decodeQrFromFile(file);
@@ -132,6 +137,31 @@ export default function Check() {
         message: "Couldn't read that image. Try a different file.",
       });
     }
+  };
+
+  const onQrFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await processQrFile(file);
+  };
+
+  const onQrDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingQr(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    await processQrFile(file);
+  };
+
+  const onQrDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!isDraggingQr) setIsDraggingQr(true);
+  };
+
+  const onQrDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDraggingQr(false);
   };
 
   const onSubmit = async () => {
@@ -230,36 +260,108 @@ export default function Check() {
             )}
           </AnimatePresence>
         </div>
-        <div className="flex items-center justify-between gap-3 mt-3 text-xs text-ink-muted">
-          <div className="flex items-center gap-2">
-            <Lock className="w-3 h-3" strokeWidth={2} />
-            Ephemeral by design. We don't save what you paste.
+        <div className="flex items-center gap-2 mt-3 text-xs text-ink-muted">
+          <Lock className="w-3 h-3" strokeWidth={2} />
+          Ephemeral by design. We don't save what you paste.
+        </div>
+
+        {/* QR DROP ZONE */}
+        <div
+          role="button"
+          tabIndex={qrState.kind === "decoding" ? -1 : 0}
+          onClick={qrState.kind === "decoding" ? undefined : onPickQr}
+          onKeyDown={(e) => {
+            if (qrState.kind === "decoding") return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onPickQr();
+            }
+          }}
+          onDragEnter={onQrDragOver}
+          onDragOver={onQrDragOver}
+          onDragLeave={onQrDragLeave}
+          onDrop={onQrDrop}
+          className={cn(
+            "mt-4 rounded-2xl border-2 border-dashed bg-white px-5 py-5 text-sm transition-all outline-none touch-manipulation",
+            qrState.kind === "decoding"
+              ? "border-rule bg-surface cursor-wait"
+              : isDraggingQr
+                ? "border-blue bg-blue-soft/40 scale-[1.005]"
+                : qrState.kind === "ok"
+                  ? "border-good/60 bg-good/5"
+                  : qrState.kind === "error"
+                    ? "border-bad/60 bg-bad/5"
+                    : "border-rule hover:border-blue hover:bg-blue-soft/20 cursor-pointer focus:border-blue focus:ring-2 focus:ring-blue/20",
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={cn(
+                "shrink-0 w-10 h-10 rounded-xl flex items-center justify-center",
+                qrState.kind === "ok"
+                  ? "bg-good/15 text-good"
+                  : qrState.kind === "error"
+                    ? "bg-bad/15 text-bad"
+                    : isDraggingQr
+                      ? "bg-blue text-white"
+                      : "bg-blue-soft text-blue",
+              )}
+            >
+              {qrState.kind === "decoding" ? (
+                <Loader2 className="w-5 h-5 animate-spin" strokeWidth={2.2} />
+              ) : qrState.kind === "ok" ? (
+                <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} />
+              ) : isDraggingQr ? (
+                <Upload className="w-5 h-5" strokeWidth={2.2} />
+              ) : (
+                <QrCode className="w-5 h-5" strokeWidth={2.2} />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              {qrState.kind === "decoding" ? (
+                <>
+                  <div className="text-ink font-medium">Reading QR code…</div>
+                  <div className="text-ink-muted text-xs mt-0.5">
+                    Decoding locally — nothing leaves your device.
+                  </div>
+                </>
+              ) : qrState.kind === "ok" ? (
+                <>
+                  <div className="text-good font-medium">
+                    QR decoded — added to the input above.
+                  </div>
+                  <div className="text-ink-muted text-xs mt-0.5 font-mono truncate">
+                    {qrState.value}
+                  </div>
+                </>
+              ) : qrState.kind === "error" ? (
+                <>
+                  <div className="text-bad font-medium">
+                    {qrState.message}
+                  </div>
+                  <div className="text-ink-muted text-xs mt-0.5">
+                    Click or drop another image to try again.
+                  </div>
+                </>
+              ) : isDraggingQr ? (
+                <div className="text-blue font-medium">
+                  Drop the image to decode it.
+                </div>
+              ) : (
+                <>
+                  <div className="text-ink font-medium">
+                    Drop a QR image, or{" "}
+                    <span className="text-blue underline-offset-2 underline decoration-blue/40">
+                      click to upload
+                    </span>
+                  </div>
+                  <div className="text-ink-muted text-xs mt-0.5">
+                    PNG · JPG · HEIC. Decoded right here in your browser.
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={onPickQr}
-            disabled={qrState.kind === "decoding"}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 min-h-[32px] touch-manipulation transition-colors",
-              qrState.kind === "decoding"
-                ? "border-rule bg-surface text-ink-muted cursor-wait"
-                : "border-rule bg-white text-ink hover:border-blue hover:text-blue",
-            )}
-          >
-            {qrState.kind === "decoding" ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.2} />
-            ) : (
-              <QrCode className="w-3.5 h-3.5" strokeWidth={2.2} />
-            )}
-            <span className="hidden sm:inline">
-              {qrState.kind === "decoding"
-                ? "Reading QR…"
-                : "Scan QR from image"}
-            </span>
-            <span className="sm:hidden">
-              {qrState.kind === "decoding" ? "Reading…" : "Scan QR"}
-            </span>
-          </button>
           <input
             ref={qrInputRef}
             type="file"
@@ -268,34 +370,6 @@ export default function Check() {
             onChange={onQrFile}
           />
         </div>
-        <AnimatePresence>
-          {qrState.kind === "ok" && (
-            <motion.div
-              key="qr-ok"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-good/10 text-good px-2 py-1 text-[11px]"
-            >
-              <CheckCircle2 className="w-3 h-3" strokeWidth={2.2} />
-              QR decoded —{" "}
-              <span className="font-mono truncate max-w-[260px]">
-                {qrState.value}
-              </span>
-            </motion.div>
-          )}
-          {qrState.kind === "error" && (
-            <motion.div
-              key="qr-err"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-bad/10 text-bad px-2 py-1 text-[11px]"
-            >
-              {qrState.message}
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         <SupportedPlatforms />
       </section>
