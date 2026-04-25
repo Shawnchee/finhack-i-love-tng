@@ -37,7 +37,7 @@ install:
 	$(PIP) install --upgrade pip
 	$(PIP) install -r $(ROOT)/mule_check_api/requirements.txt
 	$(PIP) install -e $(ROOT)/layer3-behavioral-fraud
-	$(PIP) install -r $(ROOT)/fraud_detect_api/requirements.txt
+	$(PIP) install -e $(ROOT)/fraud_detect_api
 	$(PY) -m playwright install chromium
 	cd $(ROOT)/frontend && npm install
 
@@ -46,5 +46,5 @@ clean-venv:
 	@echo "Removed $(VENV). Run 'make install' to rebuild."
 
 kill:
-	-@lsof -ti :8000 :8081 :8083 :5173 | xargs kill -9 2>/dev/null
+	-@lsof -ti :8000 :8082 :8083 :5173 | xargs kill -9 2>/dev/null
 	@echo "Freed dev ports."

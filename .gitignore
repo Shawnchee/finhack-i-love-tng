@@ -55,3 +55,7 @@ ENV/
 
 *.db
 *.md
+
+# Telethon session files (contain auth credentials)
+*.session
+*.session-journal

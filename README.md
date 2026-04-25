@@ -21,7 +21,7 @@ Three independent FastAPI services + one React frontend. Each service is owned b
           ▼                         ▼                         ▼
 ┌──────────────────┐   ┌────────────────────────┐   ┌──────────────────┐
 │ mule_check_api   │   │ layer3-behavioral-     │   │ fraud_detect_api │
-│   :8000          │   │ fraud  :8083           │   │   :8081          │
+│   :8000          │   │ fraud  :8083           │   │   :8082          │
 │                  │   │                        │   │                  │
 │ NFP + SemakMule  │   │ per-user transaction   │   │ URL scrape +     │
 │ registry mocks   │   │ risk scoring (rules    │   │ scam-keyword     │
@@ -33,7 +33,7 @@ Three independent FastAPI services + one React frontend. Each service is owned b
 |---|---|---|---|
 | [`mule_check_api`](mule_check_api/) | 8000 | FastAPI + SQLAlchemy | Mocks PayNet **NFP** and **SemakMule** mule-account registries — wire-format compatible with the production APIs. |
 | [`layer3-behavioral-fraud`](layer3-behavioral-fraud/) | 8083 | FastAPI + scikit-learn | Per-user behavioral anomaly detection. Scores a candidate transaction `0–100` and returns `ALLOW / NOTIFY / CHALLENGE / BLOCK` with explainable reason codes. |
-| [`fraud_detect_api`](fraud_detect_api/) | 8081 | FastAPI + Playwright + OpenAI-compatible LLM | Scrapes a URL (Reddit, Lowyat, Cari, Mudah, generic sites), matches against a multilingual scam-keyword corpus (EN / BM / Manglish / Chinese), then runs LLM classification across four dimensions: regulatory (SC Malaysia capital-market scope), localisation (Malaysian targeting), scam type, and scam indicators. Returns a final `SCAM` / `NOT_SCAM` verdict with an evidence summary. |
+| [`fraud_detect_api`](fraud_detect_api/) | 8082 | FastAPI + Playwright + OpenAI-compatible LLM | Scrapes a URL (Reddit, Lowyat, Cari, Mudah, generic sites), matches against a multilingual scam-keyword corpus (EN / BM / Manglish / Chinese), then runs LLM classification across four dimensions: regulatory (SC Malaysia capital-market scope), localisation (Malaysian targeting), scam type, and scam indicators. Returns a final `SCAM` / `NOT_SCAM` verdict with an evidence summary. |
 | [`frontend`](frontend/) | 5173 | React 19 + Vite + Tailwind | Single-page app: `/`, `/check`, `/checking`, `/report/:id`, `/about`. |
 
 ---
@@ -58,7 +58,7 @@ That's it. Open <http://localhost:5173>.
 If a port hangs after a crash:
 
 ```bash
-make kill   # frees 8000 / 8081 / 8083 / 5173
+make kill   # frees 8000 / 8082 / 8083 / 5173
 ```
 
 ### What `overmind start` does
@@ -68,7 +68,7 @@ make kill   # frees 8000 / 8081 / 8083 / 5173
 ```
 mule:     .venv/bin/python -m uvicorn mule_check_api.main:app --port 8000 --reload
 layer3:   cd layer3-behavioral-fraud && ../.venv/bin/python -m uvicorn app.main:app --port 8083 --reload
-scrape:   cd fraud_detect_api && ../.venv/bin/python -m uvicorn app.main:app --port 8081 --reload
+scrape:   cd fraud_detect_api && ../.venv/bin/python -m uvicorn app.main:app --port 8082 --reload
 frontend: cd frontend && npm run dev
 ```
 
@@ -95,7 +95,7 @@ uvicorn mule_check_api.main:app --port 8000 --reload
 cd layer3-behavioral-fraud && uvicorn app.main:app --port 8083 --reload
 
 # fraud_detect_api
-cd fraud_detect_api && uvicorn app.main:app --port 8081 --reload
+cd fraud_detect_api && uvicorn app.main:app --port 8082 --reload
 
 # frontend (no venv needed)
 cd frontend && npm run dev
@@ -127,7 +127,7 @@ Localhost defaults are baked in — no `.env` needed for local dev.
 ```bash
 VITE_MULE_API_URL=http://localhost:8000     # mule_check_api
 VITE_LAYER3_API_URL=http://localhost:8083   # layer3-behavioral-fraud
-VITE_SCRAPE_API_URL=http://localhost:8081   # fraud_detect_api
+VITE_SCRAPE_API_URL=http://localhost:8082   # fraud_detect_api
 ```
 
 ---
@@ -161,7 +161,7 @@ VITE_SCRAPE_API_URL=http://localhost:8081   # fraud_detect_api
 │   ├── scripts/generate_synthetic_data.py
 │   └── tests/test_scenarios.py
 │
-├── fraud_detect_api/              # URL scraper + keyword matcher (port 8081)
+├── fraud_detect_api/              # URL scraper + keyword matcher (port 8082)
 │   └── app/
 │       ├── main.py                # FastAPI entry + /api/scrape
 │       ├── scraper.py             # site-specific routing
