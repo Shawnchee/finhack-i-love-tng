@@ -12,6 +12,8 @@ import {
   Loader2,
 } from "lucide-react";
 import jsQR from "jsqr";
+import { BrowserQRCodeReader } from "@zxing/browser";
+import { BinaryBitmap, HybridBinarizer, RGBLuminanceSource } from "@zxing/library";
 import { detectInput, MALAYSIAN_BANKS, type DetectedKind } from "../lib/detect";
 import { cn } from "../lib/cn";
 import { AnimatePresence, motion } from "framer-motion";
@@ -633,20 +635,47 @@ async function decodeQrFromFile(file: File): Promise<string | null> {
       el.src = url;
     });
 
-    // Cap the canvas size — jsQR is O(pixels), and phone photos can be 4000×3000.
+    // 1) ZXing on the raw image element — best for stylised QRs (Telegram-style
+    //    rounded modules, centre logo overlays).
+    try {
+      const reader = new BrowserQRCodeReader();
+      const result = await reader.decodeFromImageElement(img);
+      const text = result?.getText?.()?.trim();
+      if (text) return text;
+    } catch {
+      /* fall through */
+    }
+
+    // 2) Render to canvas (capped) for the remaining attempts.
     const MAX = 1280;
     const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
     const w = Math.max(1, Math.round(img.naturalWidth * scale));
     const h = Math.max(1, Math.round(img.naturalHeight * scale));
-
     const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
     ctx.drawImage(img, 0, 0, w, h);
     const imageData = ctx.getImageData(0, 0, w, h);
 
+    // 3) ZXing on the resized RGBA buffer.
+    try {
+      const luminance = new RGBLuminanceSource(
+        new Uint8ClampedArray(imageData.data),
+        w,
+        h,
+      );
+      const bitmap = new BinaryBitmap(new HybridBinarizer(luminance));
+      const reader = new BrowserQRCodeReader();
+      const result = reader.decodeBitmap(bitmap);
+      const text = result?.getText?.()?.trim();
+      if (text) return text;
+    } catch {
+      /* fall through */
+    }
+
+    // 4) jsQR fallback — fast and good on standard square-module QRs.
     const code = jsQR(imageData.data, imageData.width, imageData.height, {
       inversionAttempts: "attemptBoth",
     });
