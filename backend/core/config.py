@@ -8,7 +8,10 @@ class Config(BaseSettings):
     app_name: str = "TNG Fraud Detection API"
     debug: bool = False
 
-    # SQLite (mule check)
+    # Database
+    # Local dev: leave DATABASE_URL unset → falls back to SQLite
+    # Production: DATABASE_URL=postgresql://user:pass@apsara-endpoint:5432/dbname
+    database_url: str = ""
     db_name: str = "test.db"
 
     # LLM (fraud scan)
@@ -35,6 +38,8 @@ class Config(BaseSettings):
 
     @property
     def db_url(self) -> str:
+        if self.database_url:
+            return self.database_url
         return f"sqlite:///./{self.db_name}"
 
 

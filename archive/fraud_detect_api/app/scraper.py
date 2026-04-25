@@ -30,10 +30,10 @@ import httpx
 import trafilatura
 from playwright.async_api import Browser
 
-from app.cari_scraper import scrape_cari_thread
-from app.keywords import match_keywords
-from app.telegram_scraper import scrape_telegram_post
-from app.tiktok_scraper import scrape_tiktok_video
+from archive.fraud_detect_api.app.cari_scraper import scrape_cari_thread
+from archive.fraud_detect_api.app.keywords import match_keywords
+from archive.fraud_detect_api.app.telegram_scraper import scrape_telegram_post
+from archive.fraud_detect_api.app.tiktok_scraper import scrape_tiktok_video
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,9 @@ _JS_DOMAINS: frozenset[str] = frozenset(
 
 _TIKTOK_DOMAINS: frozenset[str] = frozenset({"tiktok.com"})
 
-_TELEGRAM_DOMAINS: frozenset[str] = frozenset({"t.me", "telegram.me", "web.telegram.org"})
+_TELEGRAM_DOMAINS: frozenset[str] = frozenset(
+    {"t.me", "telegram.me", "web.telegram.org"}
+)
 
 # Require login — scraping is not feasible
 _BLOCKED_DOMAINS: frozenset[str] = frozenset(
@@ -101,10 +103,14 @@ def _clean(text: str) -> str:
     text = _RE_WHITESPACE.sub(" ", text)
     text = _RE_ZERO_WIDTH.sub("", text)
     text = (
-        text.replace("\u2018", "'").replace("\u2019", "'")
-            .replace("\u201c", '"').replace("\u201d", '"')
-            .replace("\u2013", "-").replace("\u2014", "-")
-            .replace("\u2026", "...").replace("\xa0", " ")
+        text.replace("\u2018", "'")
+        .replace("\u2019", "'")
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2013", "-")
+        .replace("\u2014", "-")
+        .replace("\u2026", "...")
+        .replace("\xa0", " ")
     )
     text = _RE_MULTI_SPACE.sub(" ", text)
     text = _RE_MULTI_NEWLINE.sub("\n\n", text)
@@ -164,6 +170,7 @@ def _make_post_id(url: str) -> str:
 # Create a script-type app at reddit.com/prefs/apps.
 # ---------------------------------------------------------------------------
 
+
 class _RedditScraper:
     """
     Fetches Reddit posts and comments via asyncpraw OAuth.
@@ -211,9 +218,13 @@ class _RedditScraper:
                 top_level = list(submission.comments)[:50]
                 comment_lines = self._parse_comments(top_level, depth=0, max_depth=3)
             except asyncpraw.exceptions.AsyncPRAWException as exc:
-                logger.warning("[Reddit/PRAW] Comment fetch failed for %s: %s", url, exc)
+                logger.warning(
+                    "[Reddit/PRAW] Comment fetch failed for %s: %s", url, exc
+                )
             except Exception as exc:
-                logger.warning("[Reddit/PRAW] Comment fetch failed for %s: %s", url, exc)
+                logger.warning(
+                    "[Reddit/PRAW] Comment fetch failed for %s: %s", url, exc
+                )
 
             parts: list[str] = [f"[POST TITLE] {title}"]
             if selftext:
@@ -233,7 +244,9 @@ class _RedditScraper:
                 post_id=post_id,
             )
 
-    def _parse_comments(self, comment_list: list, depth: int, max_depth: int) -> list[str]:
+    def _parse_comments(
+        self, comment_list: list, depth: int, max_depth: int
+    ) -> list[str]:
         lines: list[str] = []
         for c in comment_list:
             if not hasattr(c, "body"):
@@ -247,7 +260,9 @@ class _RedditScraper:
             if depth < max_depth:
                 replies_forest = getattr(c, "replies", None)
                 if replies_forest is not None:
-                    lines.extend(self._parse_comments(list(replies_forest), depth + 1, max_depth))
+                    lines.extend(
+                        self._parse_comments(list(replies_forest), depth + 1, max_depth)
+                    )
         return lines
 
 
@@ -261,6 +276,7 @@ async def _fetch_reddit_post(url: str) -> "ScrapeResult":
 # ---------------------------------------------------------------------------
 # Generic scrapers
 # ---------------------------------------------------------------------------
+
 
 def _extract_text(html_content: str, url: str) -> tuple[str, str]:
     """Return (title, text) from HTML using trafilatura."""
@@ -316,6 +332,7 @@ async def _fetch_playwright(url: str, browser: Browser) -> str:
 # ScrapeResult
 # ---------------------------------------------------------------------------
 
+
 class ScrapeResult:
     def __init__(
         self,
@@ -339,6 +356,7 @@ class ScrapeResult:
 # Public entry point
 # ---------------------------------------------------------------------------
 
+
 async def scrape(url: str, browser: Browser) -> ScrapeResult:
     """Fetch a URL, extract text, run keyword matching, and return a ScrapeResult."""
 
@@ -358,7 +376,10 @@ async def scrape(url: str, browser: Browser) -> ScrapeResult:
         return ScrapeResult(url, "telegram", title, body, used_javascript=False)
 
     if _is_tiktok(url):
-        logger.info("[tiktok] Fetching video via oEmbed (Playwright fallback if needed): %s", url)
+        logger.info(
+            "[tiktok] Fetching video via oEmbed (Playwright fallback if needed): %s",
+            url,
+        )
         title, body = await scrape_tiktok_video(url, browser=browser)
         return ScrapeResult(url, "tiktok", title, body, used_javascript=False)
 
@@ -376,7 +397,11 @@ async def scrape(url: str, browser: Browser) -> ScrapeResult:
             title, body = _extract_text(html_content, url)
             if len(body) >= _MIN_CONTENT_CHARS:
                 return ScrapeResult(url, platform, title, body, used_javascript=False)
-            logger.info("httpx content too thin (%d chars) for %s, retrying with Playwright", len(body), url)
+            logger.info(
+                "httpx content too thin (%d chars) for %s, retrying with Playwright",
+                len(body),
+                url,
+            )
 
     html_content = await _fetch_playwright(url, browser)
     title, body = _extract_text(html_content, url)

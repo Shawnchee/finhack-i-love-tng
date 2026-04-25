@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
-from mule_check_api.db.schema import NFPMule
-from mule_check_api.models.nfp import (
+from archive.mule_check_api.db.schema import NFPMule
+from archive.mule_check_api.models.nfp import (
     IdType,
     MuleCheckResult,
     NFPMuleCheckRequest,

@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from mule_check_api.db.deps import get_db
-from mule_check_api.models.nfp import NFPMuleCheckRequest, NFPMuleCheckResponse
-from mule_check_api.services.nfp_service import NFPService
+from archive.mule_check_api.db.deps import get_db
+from archive.mule_check_api.models.nfp import NFPMuleCheckRequest, NFPMuleCheckResponse
+from archive.mule_check_api.services.nfp_service import NFPService
 
 router = APIRouter(prefix="/nfp", tags=["NFP"])
 

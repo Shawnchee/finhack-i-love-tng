@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
-from mule_check_api.db.schema import SemakMule
-from mule_check_api.models.semakmule import (
+from archive.mule_check_api.db.schema import SemakMule
+from archive.mule_check_api.models.semakmule import (
     SemakMuleCheckRequest,
     SemakMuleCheckResponse,
 )

@@ -25,7 +25,7 @@ jobs:
         with:
           filters: |
             backend:
-              - 'mule_check_api/**'
+              - 'backend/**'
               - 'ci/docker/backend/**'
               - 'ci/task-definitions/backend.json'
             frontend:
@@ -106,6 +106,8 @@ jobs:
           tags: |
             ${{ env.ECR_FRONTEND }}:latest
             ${{ env.ECR_FRONTEND }}:${{ github.sha }}
+          build-args: |
+            VITE_API_URL=http://scambuster-alb-399113752.ap-southeast-1.elb.amazonaws.com
 
       - name: Render frontend task definition
         id: render-frontend

@@ -1,6 +1,12 @@
 """Run from project root with: .venv/bin/python -m mule_check_api.dummy_data.seed"""
 
-from mule_check_api.db.schema import Base, NFPMule, SemakMule, SessionLocal, engine
+from archive.mule_check_api.db.schema import (
+    Base,
+    NFPMule,
+    SemakMule,
+    SessionLocal,
+    engine,
+)
 
 _NFP_MULES = [
     NFPMule(

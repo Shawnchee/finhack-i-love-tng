@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from mule_check_api.api.v1 import nfp, semakmule
-from mule_check_api.core.config import config
-from mule_check_api.core.logging import setup_logging
-from mule_check_api.db.schema import Base, engine
+from archive.mule_check_api.api.v1 import nfp
+from archive.mule_check_api.api.v1 import semakmule
+from archive.mule_check_api.core.config import config
+from archive.mule_check_api.core.logging import setup_logging
+from archive.mule_check_api.db.schema import Base, engine
 
 setup_logging()
 Base.metadata.create_all(bind=engine)

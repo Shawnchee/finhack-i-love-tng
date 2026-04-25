@@ -10,9 +10,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from playwright.async_api import async_playwright
 
-from app.classifier import FraudDetector
-from app.models import ScanRequest, ScanResponse
-from app.scraper import scrape
+from archive.fraud_detect_api.app.classifier import FraudDetector
+from archive.fraud_detect_api.app.models import ScanRequest, ScanResponse
+from archive.fraud_detect_api.app.scraper import scrape
 
 load_dotenv()
 
@@ -70,7 +70,9 @@ async def scan(body: ScanRequest) -> ScanResponse:
         raise HTTPException(status_code=422, detail=f"Failed to scrape URL: {exc}")
 
     if not scraped.body:
-        raise HTTPException(status_code=422, detail="No extractable text content found at this URL.")
+        raise HTTPException(
+            status_code=422, detail="No extractable text content found at this URL."
+        )
 
     # Step 2: classify
     classification = None
@@ -83,7 +85,9 @@ async def scan(body: ScanRequest) -> ScanResponse:
         raise HTTPException(status_code=500, detail=f"Classification failed: {exc}")
 
     if classification is None:
-        raise HTTPException(status_code=500, detail="LLM classification returned no result.")
+        raise HTTPException(
+            status_code=500, detail="LLM classification returned no result."
+        )
 
     response = ScanResponse(
         post_id=scraped.post_id,
