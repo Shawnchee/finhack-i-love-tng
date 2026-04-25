@@ -1,8 +1,10 @@
-"""End-to-end checks for the 4 demo scenarios.
+"""End-to-end scenario tests for the 4 demo personas.
 
-Each test drives the real FastAPI app through TestClient — lifespan runs,
-so all 4 Isolation Forests are trained on synthetic history before scoring.
-If any of these flip tier, something regressed.
+Requires AWS credentials and S3_DATA_BUCKET + SAGEMAKER_ENDPOINT_NAME set —
+TestClient triggers the lifespan which pulls data from S3 and routes ML
+scoring to the SageMaker endpoint. Run against the real AWS environment only.
+
+If any decision tier flips, something regressed.
 """
 from __future__ import annotations
 

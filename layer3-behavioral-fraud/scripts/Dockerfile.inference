@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir \
+    flask==3.0.* \
+    scikit-learn==1.3.* \
+    joblib \
+    numpy
+
+LABEL com.amazonaws.sagemaker.capabilities.multi-models=true
+
+COPY serve.py /opt/program/serve.py
+
+WORKDIR /opt/program
+
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8080
+
+ENTRYPOINT ["python", "serve.py"]

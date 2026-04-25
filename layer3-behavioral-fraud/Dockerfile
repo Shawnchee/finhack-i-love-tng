@@ -1,8 +1,7 @@
 # ── Layer 3 — Behavioral Fraud Detection ──────────────────────────────────
-# FastAPI + per-user Isolation Forest (sklearn). Listens on port 8083.
+# FastAPI + SageMaker Multi-Model Endpoint. Listens on port 8083.
 FROM python:3.11-slim
 
-# Only system dep we need is curl (for the healthcheck). No Playwright here.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
   && rm -rf /var/lib/apt/lists/*
@@ -17,14 +16,19 @@ COPY pyproject.toml ./
 
 RUN uv pip install --system -e "." --no-cache
 
-# Application source + synthetic dataset (IF models are trained from this on startup)
 COPY app/ ./app/
-COPY data/ ./data/
+
+# ── AWS env vars ──────────────────────────────────────────────────────────────
+# Inject real values at runtime (ECS task definition / docker run -e).
+# DO NOT hardcode credentials here.
+ENV AWS_REGION=ap-southeast-1
+ENV SAGEMAKER_ENDPOINT_NAME=layer3-isolation-forest-mme
+# S3 bucket where data/users.json and data/transactions.json are stored.
+ENV S3_DATA_BUCKET=
 
 EXPOSE 8083
 
-# start-period covers JSON load + 4 IsolationForest fits (~1s on small data)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD curl -f http://localhost:8083/api/health || exit 1
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8083"]

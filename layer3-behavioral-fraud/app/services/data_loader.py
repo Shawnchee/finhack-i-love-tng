@@ -1,28 +1,46 @@
-"""Loads synthetic data into memory on startup.
+"""Loads data from S3 into memory on startup.
 
 Single source of truth at runtime. Mutations from /api/simulate_transaction
-happen in-memory only (nothing is persisted back to disk).
+happen in-memory only (nothing is persisted back to S3).
+
+Expects s3://{S3_DATA_BUCKET}/data/users.json and
+         s3://{S3_DATA_BUCKET}/data/transactions.json
 """
 from __future__ import annotations
 
 import json
+import logging
+import os
 from datetime import datetime
-from pathlib import Path
+
+import boto3
 
 from app.models.user import Transaction, User
 
-_DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+logger = logging.getLogger(__name__)
+
+_S3_DATA_PREFIX = "data"
 
 _users: dict[str, User] = {}
 
 
-def load(data_dir: Path | None = None) -> None:
-    """Read users.json + transactions.json into memory."""
+def load() -> None:
+    """Pull users + transactions from S3 and load into memory."""
     global _users
-    d = data_dir or _DEFAULT_DATA_DIR
 
-    users_raw = json.loads((d / "users.json").read_text(encoding="utf-8"))
-    tx_raw = json.loads((d / "transactions.json").read_text(encoding="utf-8"))
+    bucket = os.environ.get("S3_DATA_BUCKET", "")
+    if not bucket:
+        raise RuntimeError("S3_DATA_BUCKET environment variable is not set.")
+    region = os.environ.get("AWS_REGION", "ap-southeast-1")
+    s3 = boto3.client("s3", region_name=region)
+
+    logger.info("Pulling data from s3://%s/%s/", bucket, _S3_DATA_PREFIX)
+    users_raw = json.loads(
+        s3.get_object(Bucket=bucket, Key=f"{_S3_DATA_PREFIX}/users.json")["Body"].read()
+    )
+    tx_raw = json.loads(
+        s3.get_object(Bucket=bucket, Key=f"{_S3_DATA_PREFIX}/transactions.json")["Body"].read()
+    )
 
     _users = {
         uid: User(user_id=uid, name=info["name"])
