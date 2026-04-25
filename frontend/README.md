@@ -39,7 +39,6 @@ VITE_SCRAPE_API_URL=http://localhost:8081   # fraud_detect_api  (URL scrape)
 | `/check` | [`Check`](src/pages/Check.tsx) | Progressive smart input — bank account, link, or chat. |
 | `/checking` | [`Checking`](src/pages/Checking.tsx) | Fan-out progress (NFP, SemakMule, link scan, behavior — calls all 3 backends in parallel via `Promise.allSettled`). |
 | `/report/:id` | [`Report`](src/pages/Report.tsx) | Verdict band + 2×2 signal cards + recommended next action. |
-| `/transaction-check` | [`TransactionCheck`](src/pages/TransactionCheck.tsx) | Layer-3 demo: score a transaction against a persona's behavioural baseline. |
 | `/about` | [`About`](src/pages/About.tsx) | Trust page — data handling, sources, disclaimer. |
 
 ---
@@ -56,7 +55,6 @@ src/
 │   ├── Check.tsx
 │   ├── Checking.tsx
 │   ├── Report.tsx
-│   ├── TransactionCheck.tsx
 │   └── About.tsx
 ├── components/
 │   ├── TopNav.tsx

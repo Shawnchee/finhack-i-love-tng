@@ -34,7 +34,7 @@ Three independent FastAPI services + one React frontend. Each service is owned b
 | [`mule_check_api`](mule_check_api/) | 8000 | FastAPI + SQLAlchemy | Mocks PayNet **NFP** and **SemakMule** mule-account registries — wire-format compatible with the production APIs. |
 | [`layer3-behavioral-fraud`](layer3-behavioral-fraud/) | 8083 | FastAPI + scikit-learn | Per-user behavioral anomaly detection. Scores a candidate transaction `0–100` and returns `ALLOW / NOTIFY / CHALLENGE / BLOCK` with explainable reason codes. |
 | [`fraud_detect_api`](fraud_detect_api/) | 8081 | FastAPI + Playwright + OpenAI-compatible LLM | Scrapes a URL (Reddit, Lowyat, Cari, Mudah, generic sites), matches against a multilingual scam-keyword corpus (EN / BM / Manglish / Chinese), then runs LLM classification across four dimensions: regulatory (SC Malaysia capital-market scope), localisation (Malaysian targeting), scam type, and scam indicators. Returns a final `SCAM` / `NOT_SCAM` verdict with an evidence summary. |
-| [`frontend`](frontend/) | 5173 | React 19 + Vite + Tailwind | Single-page app: `/`, `/check`, `/checking`, `/report/:id`, `/transaction-check`, `/about`. |
+| [`frontend`](frontend/) | 5173 | React 19 + Vite + Tailwind | Single-page app: `/`, `/check`, `/checking`, `/report/:id`, `/about`. |
 
 ---
 
@@ -170,7 +170,7 @@ VITE_SCRAPE_API_URL=http://localhost:8081   # fraud_detect_api
 │
 └── frontend/                      # React 19 + Vite (port 5173)
     └── src/
-        ├── pages/                 # Landing, Check, Checking, Report, About, TransactionCheck
+        ├── pages/                 # Landing, Check, Checking, Report, About
         ├── components/            # BlurText, CountUp, Magnet, TiltedCard, ...
         └── lib/
             ├── api.ts             # typed clients for all 3 backends
