@@ -13,16 +13,35 @@ env:
   ECS_SERVICE_FRONTEND: ilovetng-frontend-service-1h78j0to
 
 jobs:
-  build-and-push:
-    name: Build & Push
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'mule_check_api/**'
+              - 'ci/docker/backend/**'
+              - 'ci/task-definitions/backend.json'
+            frontend:
+              - 'frontend/**'
+              - 'ci/docker/frontend/**'
+              - 'ci/task-definitions/frontend.json'
+
+  build-deploy-backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -31,7 +50,6 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build & push backend
@@ -43,16 +61,6 @@ jobs:
           tags: |
             ${{ env.ECR_BACKEND }}:latest
             ${{ env.ECR_BACKEND }}:${{ github.sha }}
-
-      - name: Build & push frontend
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ci/docker/frontend/Dockerfile
-          push: true
-          tags: |
-            ${{ env.ECR_FRONTEND }}:latest
-            ${{ env.ECR_FRONTEND }}:${{ github.sha }}
 
       - name: Render backend task definition
         id: render-backend
@@ -69,6 +77,35 @@ jobs:
           service: ${{ env.ECS_SERVICE_BACKEND }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
+
+  build-deploy-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::940278683083:role/ilovetng-service-account-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ci/docker/frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ECR_FRONTEND }}:latest
+            ${{ env.ECR_FRONTEND }}:${{ github.sha }}
 
       - name: Render frontend task definition
         id: render-frontend
