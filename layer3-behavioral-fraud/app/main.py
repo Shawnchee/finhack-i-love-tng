@@ -11,8 +11,8 @@ from app.models.request import CheckTransactionRequest, SimulateTransactionReque
 from app.models.response import CheckTransactionResponse, UserProfileResponse
 from app.models.user import Transaction
 from app.services import data_loader
+from app.services import ml_model
 from app.services.feature_engineering import build_feature_vector
-from app.services.ml_model import registry as ml_registry
 from app.services.profile_builder import build_profile
 from app.services.risk_scorer import score_transaction
 from app.services.rules_engine import run_all as run_rules
@@ -25,8 +25,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     data_loader.load()
     logger.info("Loaded %d users into memory.", len(data_loader.all_user_ids()))
-    users = [data_loader.get_user(uid) for uid in data_loader.all_user_ids()]
-    ml_registry.train_all([u for u in users if u is not None])
     yield
     logger.info("Layer 3 shutting down.")
 
@@ -73,7 +71,7 @@ async def check_transaction(body: CheckTransactionRequest) -> CheckTransactionRe
     reasons = run_rules(txn, user)
     prior = [t for t in user.transactions if t.timestamp < txn.timestamp]
     features = build_feature_vector(txn, prior)
-    ml_score = ml_registry.score(body.user_id, features)
+    ml_score = ml_model.score(body.user_id, features)
     risk, decision, warning, action = score_transaction(reasons, ml_score)
 
     return CheckTransactionResponse(
