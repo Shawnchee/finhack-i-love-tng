@@ -8,6 +8,7 @@ import Report from "./pages/Report";
 import About from "./pages/About";
 import DemoTransfer from "./pages/DemoTransfer";
 import DemoLinks from "./pages/DemoLinks";
+import Dashboard from "./pages/Dashboard";
 
 function Shell() {
   const { pathname } = useLocation();
@@ -24,6 +25,7 @@ function Shell() {
         <Route path="/check" element={<Check />} />
         <Route path="/checking" element={<Checking />} />
         <Route path="/report/:id" element={<Report />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/about" element={<About />} />
         <Route path="/demo/transfer" element={<DemoTransfer />} />
         <Route path="/demo/links" element={<DemoLinks />} />

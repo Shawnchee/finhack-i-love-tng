@@ -28,6 +28,17 @@ export default function TopNav() {
         </Link>
         <nav className="flex items-center gap-3 sm:gap-5">
           <NavLink
+            to="/dashboard"
+            className={({ isActive }) =>
+              cn(
+                "inline-flex items-center min-h-[44px] px-3 -mx-1 text-sm text-ink-muted hover:text-ink transition-colors touch-manipulation",
+                isActive && "text-ink"
+              )
+            }
+          >
+            Dashboard
+          </NavLink>
+          <NavLink
             to="/about"
             className={({ isActive }) =>
               cn(
