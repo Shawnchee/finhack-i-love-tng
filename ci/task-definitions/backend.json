@@ -17,6 +17,48 @@
       "essential": true,
       "environment": [],
       "environmentFiles": [],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:940278683083:secret:config-secrets-IcrUkQ:DATABASE_URL::"
+        },
+        {
+          "name": "LLM_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:940278683083:secret:config-secrets-IcrUkQ:LLM_API_KEY::"
+        },
+        {
+          "name": "LLM_BASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:940278683083:secret:config-secrets-IcrUkQ:LLM_BASE_URL::"
+        },
+        {
+          "name": "LLM_MODEL",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:940278683083:secret:config-secrets-IcrUkQ:LLM_MODEL::"
+        },
+        {
+          "name": "LLM_REASONING_EFFORT",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:940278683083:secret:config-secrets-IcrUkQ:LLM_REASONING_EFFORT::"
+        },
+        {
+          "name": "REDDIT_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:940278683083:secret:config-secrets-IcrUkQ:REDDIT_CLIENT_ID::"
+        },
+        {
+          "name": "REDDIT_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:940278683083:secret:config-secrets-IcrUkQ:REDDIT_CLIENT_SECRET::"
+        },
+        {
+          "name": "TELEGRAM_API_ID",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:940278683083:secret:config-secrets-IcrUkQ:TELEGRAM_API_ID::"
+        },
+        {
+          "name": "TELEGRAM_API_HASH",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:940278683083:secret:config-secrets-IcrUkQ:TELEGRAM_API_HASH::"
+        },
+        {
+          "name": "TELEGRAM_SESSION_STRING",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-1:940278683083:secret:config-secrets-IcrUkQ:TELEGRAM_SESSION_STRING::"
+        }
+      ],
       "mountPoints": [],
       "volumesFrom": [],
       "ulimits": [],
@@ -85,8 +127,8 @@
   "requiresCompatibilities": [
     "FARGATE"
   ],
-  "cpu": "512",
-  "memory": "1024",
+  "cpu": "2048",
+  "memory": "6144",
   "registeredAt": "2026-04-25T06:34:15.938Z",
   "registeredBy": "arn:aws:sts::940278683083:assumed-role/AWSReservedSSO_finhack_IsbUsersPS_5c9605f79016ec10/talenttap+finhackuser33@tngdigital.com.my",
   "enableFaultInjection": false,
