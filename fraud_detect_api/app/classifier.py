@@ -18,7 +18,9 @@ from json_repair import repair_json
 from app.models import (
     LocalisationDetail,
     RegulatoryDetail,
+    ScamCategory,
     ScamDetail,
+    ScamTypeDetail,
     Verdict,
 )
 from app.prompts import SYSTEM_PROMPT, build_user_prompt
@@ -37,12 +39,14 @@ class ClassificationResult:
         self,
         regulatory: RegulatoryDetail,
         localisation: LocalisationDetail,
+        scam_type: ScamTypeDetail,
         scam: ScamDetail,
         verdict: Verdict,
         evidence_summary: str,
     ) -> None:
         self.regulatory = regulatory
         self.localisation = localisation
+        self.scam_type = scam_type
         self.scam = scam
         self.verdict = verdict
         self.evidence_summary = evidence_summary
@@ -147,6 +151,7 @@ class FraudDetector:
             reg = data.get("regulatory", {})
             loc = data.get("localisation", {})
             scam = data.get("scam", {})
+            scam_type_raw = data.get("scam_type", {}) or {}
 
             regulatory = RegulatoryDetail(
                 is_capital_market=bool(reg.get("is_capital_market", False)),
@@ -168,6 +173,20 @@ class FraudDetector:
                 indicator_evidence=_to_str_dict(scam.get("indicator_evidence", {})),
                 reasoning=str(scam.get("reasoning", "")),
             )
+            try:
+                category = ScamCategory(
+                    str(scam_type_raw.get("category", "UNKNOWN")).upper()
+                )
+            except ValueError:
+                category = ScamCategory.UNKNOWN
+            scam_type_confidence = max(
+                0.0, min(1.0, float(scam_type_raw.get("confidence", 0.0)))
+            )
+            scam_type_detail = ScamTypeDetail(
+                category=category,
+                confidence=scam_type_confidence,
+                reasoning=str(scam_type_raw.get("reasoning", "")),
+            )
             verdict_raw = str(data.get("verdict", "NEEDS_REVIEW")).upper()
             try:
                 verdict = Verdict(verdict_raw)
@@ -177,6 +196,7 @@ class FraudDetector:
             return ClassificationResult(
                 regulatory=regulatory,
                 localisation=localisation,
+                scam_type=scam_type_detail,
                 scam=scam_detail,
                 verdict=verdict,
                 evidence_summary=str(data.get("evidence_summary", "")),

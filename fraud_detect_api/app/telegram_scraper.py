@@ -28,7 +28,7 @@ For headless / server deployment (recommended):
     asyncio.run(main())
     EOF
 
-  Then set TELEGRAM_SESSION_STRING=<output> in .env — no interactive prompt
+  Then set TELEGRAM_SESSION_STRING=1BVtsOIUBu68AwzrKP74NIUNQvuPczaVqFTIFhC1l-1ne6ugmeswGrk-0V8-7-sKJ-Dh2YduQ7GjLeCG5bJgIJyrmmKllF1Rj79umIZmB6ev71fRqnHs20XWf_XlviyUyEB6eYc6Ma2SCa6F-YFgtBhHlWUjwEyW10cw2GL3Q2ur26NgQEUrxDTf7HSK-9uCtr4vJrK6x_0Qxl4BuoXCaaJtF3-KpSNLPBDtD7kqbv-jUU0QJeO0H2BPZHD3dL_kJdDm4QC1DTDIxSq26tDhf3D-5bhVtcgTwlxm8KcVqv1b__d2k7mB5kx2EZs-ERuMGWl3DwDLsh81hSwo4DMP5uJnbyheI63c= in .env — no interactive prompt
   ever again and no session file written to disk.
 
 Supported URL formats:
@@ -106,19 +106,26 @@ async def scrape_telegram_post(url: str) -> tuple[str, str]:
     api_id = int(api_id_raw)
 
     session_string = os.getenv("TELEGRAM_SESSION_STRING", "")
-    phone = os.getenv("TELEGRAM_PHONE", "")
-    session = StringSession(session_string) if session_string else "telegram"
+    if not session_string:
+        # client.start(phone=...) calls Python's blocking input() to prompt for
+        # the OTP, which hangs the whole asyncio event loop under uvicorn — no
+        # human can type into a detached overmind/tmux pane. Refuse fast.
+        raise ValueError(
+            "TELEGRAM_SESSION_STRING is not set. Generate one locally via "
+            "the snippet in app/telegram_scraper.py's module docstring, then "
+            "add it to .env. Interactive phone-OTP auth is not supported in "
+            "the server runtime."
+        )
+    session = StringSession(session_string)
 
     entity, message_id = _parse_telegram_url(url)
 
     async with TelegramClient(session, api_id, api_hash) as client:
         if not await client.is_user_authorized():
-            if not phone:
-                raise ValueError(
-                    "Telegram session not authorised. Set TELEGRAM_SESSION_STRING "
-                    "(recommended for servers) or TELEGRAM_PHONE for first-run OTP."
-                )
-            await client.start(phone=phone)
+            raise ValueError(
+                "TELEGRAM_SESSION_STRING is set but not authorised — regenerate "
+                "it locally and update .env."
+            )
 
         # ── Resolve entity ──────────────────────────────────────────────────
         try:

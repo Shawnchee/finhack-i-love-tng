@@ -97,6 +97,7 @@ async def scan(body: ScanRequest) -> ScanResponse:
     if classification is not None:
         response.regulatory = classification.regulatory
         response.localisation = classification.localisation
+        response.scam_type = classification.scam_type
         response.scam = classification.scam
         response.verdict = classification.verdict
         response.evidence_summary = classification.evidence_summary
