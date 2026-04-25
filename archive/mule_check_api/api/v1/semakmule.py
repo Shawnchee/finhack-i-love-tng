@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from mule_check_api.db.deps import get_db
-from mule_check_api.models.semakmule import (
+from archive.mule_check_api.db.deps import get_db
+from archive.mule_check_api.models.semakmule import (
     SemakMuleCheckRequest,
     SemakMuleCheckResponse,
 )
-from mule_check_api.services.semakmule_service import SemakMuleService
+from archive.mule_check_api.services.semakmule_service import SemakMuleService
 
 router = APIRouter(prefix="/semakmule", tags=["SemakMule"])
 

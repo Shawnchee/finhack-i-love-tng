@@ -15,7 +15,7 @@ import openai
 from dotenv import load_dotenv
 from json_repair import repair_json
 
-from app.models import (
+from archive.fraud_detect_api.app.models import (
     LocalisationDetail,
     RegulatoryDetail,
     ScamCategory,
@@ -23,7 +23,7 @@ from app.models import (
     ScamTypeDetail,
     Verdict,
 )
-from app.prompts import SYSTEM_PROMPT, build_user_prompt
+from archive.fraud_detect_api.app.prompts import SYSTEM_PROMPT, build_user_prompt
 
 load_dotenv()
 
@@ -79,7 +79,9 @@ class FraudDetector:
         if not self._base_url:
             logger.warning("LLM_BASE_URL is not set — using OpenAI default endpoint.")
 
-    async def classify(self, text: str, platform: str, url: str) -> ClassificationResult | None:
+    async def classify(
+        self, text: str, platform: str, url: str
+    ) -> ClassificationResult | None:
         if len(text) > MAX_CONTENT_CHARS:
             text = text[:MAX_CONTENT_CHARS] + "\n\n[... content truncated ...]"
 
@@ -110,7 +112,10 @@ class FraudDetector:
         except openai.BadRequestError as exc:
             # Model doesn't support extra_body reasoning — retry without it
             if self._reasoning_effort and attempt == 0:
-                logger.warning("BadRequestError (likely unsupported extra_body), retrying without reasoning: %s", exc)
+                logger.warning(
+                    "BadRequestError (likely unsupported extra_body), retrying without reasoning: %s",
+                    exc,
+                )
                 self._reasoning_effort = None
                 return await self._call_with_retry(prompt, ref, attempt)
             logger.error("BadRequestError for %s: %s", ref, exc)
@@ -123,11 +128,16 @@ class FraudDetector:
                 wait = 2**attempt
                 logger.warning(
                     "Transient LLM error (attempt %d/%d): %s. Retrying in %ds",
-                    attempt + 1, MAX_RETRIES, exc, wait,
+                    attempt + 1,
+                    MAX_RETRIES,
+                    exc,
+                    wait,
                 )
                 await asyncio.sleep(wait)
                 return await self._call_with_retry(prompt, ref, attempt + 1)
-            logger.error("LLM call failed for %s after %d attempt(s): %s", ref, attempt + 1, exc)
+            logger.error(
+                "LLM call failed for %s after %d attempt(s): %s", ref, attempt + 1, exc
+            )
             return None
 
     def _parse(self, raw: str) -> ClassificationResult | None:
@@ -144,7 +154,9 @@ class FraudDetector:
                 if not isinstance(data, dict):
                     raise ValueError("repaired JSON is not a dict")
             except Exception as exc:
-                logger.error("JSON parse+repair failed: %s\nRaw (first 300): %s", exc, raw[:300])
+                logger.error(
+                    "JSON parse+repair failed: %s\nRaw (first 300): %s", exc, raw[:300]
+                )
                 return None
 
         try:

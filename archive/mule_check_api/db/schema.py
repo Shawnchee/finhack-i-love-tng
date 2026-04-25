@@ -1,7 +1,7 @@
 from sqlalchemy import String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-from mule_check_api.core.config import config
+from archive.mule_check_api.core.config import config
 
 engine = create_engine(config.db_url, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
