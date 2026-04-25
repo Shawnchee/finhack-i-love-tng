@@ -2,10 +2,17 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY mule_check_api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY mule_check_api/ ./mule_check_api/
+COPY backend/pyproject.toml .
+RUN pip install --no-cache-dir .
+
+# Install Playwright browser
+RUN playwright install chromium --with-deps
+
+COPY backend/ ./backend/
 
 EXPOSE 8000
-CMD ["uvicorn", "mule_check_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
