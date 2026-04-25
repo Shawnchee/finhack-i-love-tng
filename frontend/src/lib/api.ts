@@ -8,15 +8,16 @@
 // DevTools during the demo. On error we console.error and rethrow.
 
 // ---------------------------------------------------------------------------
-// Base URLs (Vite env vars with sensible localhost defaults)
+// Base URL — single consolidated backend
 // ---------------------------------------------------------------------------
 
-export const MULE_API_URL: string =
-  (import.meta.env.VITE_MULE_API_URL as string | undefined) ?? "http://localhost:8000";
-export const LAYER3_API_URL: string =
-  (import.meta.env.VITE_LAYER3_API_URL as string | undefined) ?? "http://localhost:8083";
-export const SCRAPE_API_URL: string =
-  (import.meta.env.VITE_SCRAPE_API_URL as string | undefined) ?? "http://localhost:8082";
+export const API_URL: string =
+  (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
+
+// Aliases kept for backwards compatibility during migration
+export const MULE_API_URL = API_URL;
+export const LAYER3_API_URL = API_URL;
+export const SCRAPE_API_URL = API_URL;
 
 // ---------------------------------------------------------------------------
 // Bank → SWIFT map (used when calling checkSemakMule)
@@ -335,7 +336,7 @@ export async function checkTransaction(
     timestamp: args.timestamp,
   };
   return postJSON<CheckTransactionRequest, CheckTransactionResponse>(
-    `${LAYER3_API_URL}/api/check_transaction`,
+    `${API_URL}/api/v1/behavioral/check-transaction`,
     body,
   );
 }
@@ -353,7 +354,7 @@ export interface UserProfileResponse {
 
 export async function getUserProfile(user_id: string): Promise<UserProfileResponse> {
   return getJSON<UserProfileResponse>(
-    `${LAYER3_API_URL}/api/user_profile/${encodeURIComponent(user_id)}`,
+    `${API_URL}/api/v1/behavioral/user-profile/${encodeURIComponent(user_id)}`,
   );
 }
 
@@ -425,7 +426,7 @@ export interface ScanResponse {
 
 export async function scanUrl(url: string): Promise<ScanResponse> {
   return postJSON<ScanRequest, ScanResponse>(
-    `${SCRAPE_API_URL}/api/scan`,
+    `${API_URL}/api/v1/scan/url`,
     { url },
   );
 }
