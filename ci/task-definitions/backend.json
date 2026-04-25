@@ -15,7 +15,11 @@
         }
       ],
       "essential": true,
-      "environment": [],
+      "environment": [
+        { "name": "S3_DATA_BUCKET", "value": "tngdfinhack-ml-model-store" },
+        { "name": "SAGEMAKER_ENDPOINT_NAME", "value": "layer3-isolation-forest-mme" },
+        { "name": "SAGEMAKER_ROLE_ARN", "value": "arn:aws:iam::940278683083:role/ilovetng-service-account-role" }
+      ],
       "environmentFiles": [],
       "secrets": [
         {
