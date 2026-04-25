@@ -205,9 +205,9 @@ const HIGH: Report = {
     {
       source: "behavior",
       state: "match",
-      headline: "Multiple high-severity rules fired (BLOCK decision).",
+      headline: "Multiple high-severity rules fired (CHALLENGE decision).",
       evidence: [
-        { label: "Decision", value: "BLOCK" },
+        { label: "Decision", value: "CHALLENGE" },
         { label: "Risk score", value: "94" },
         { label: "ML anomaly", value: "0.96" },
         { label: "Top reason", value: "recipient_on_mule_list, velocity_breach" },
@@ -505,7 +505,6 @@ function buildBehaviorSignal(layer3?: CheckTransactionResponse): SourceSignal {
   }
   let state: SignalState;
   switch (layer3.decision) {
-    case "BLOCK":
     case "CHALLENGE":
       state = "match";
       break;
@@ -674,8 +673,8 @@ function pickOverall(
 /**
  * Pick a verdict-band summary that prefers real backend prose over canned
  * copy. Priority order:
- *   1. Layer3's `user_friendly_warning` when behavior was a match (BLOCK /
- *      CHALLENGE) — the strongest signal driving a high verdict in many
+ *   1. Layer3's `user_friendly_warning` when behavior was a match (CHALLENGE)
+ *      — the strongest signal driving a high verdict in many
  *      transactional flows.
  *   2. Scrape's `evidence_summary` when the LLM produced a SCAM verdict —
  *      a tailored 2-4 sentence narrative for officer review.
@@ -697,7 +696,7 @@ function composeSummary(
   // Strongest narrative-producing signals first.
   if (
     layer3 &&
-    (layer3.decision === "BLOCK" || layer3.decision === "CHALLENGE") &&
+    layer3.decision === "CHALLENGE" &&
     layer3.user_friendly_warning?.trim()
   ) {
     return layer3.user_friendly_warning.trim();

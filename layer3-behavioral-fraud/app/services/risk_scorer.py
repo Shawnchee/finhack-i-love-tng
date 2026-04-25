@@ -5,10 +5,9 @@
     ml_contribution  = scale(ml_anomaly_score) -> 0-40
 
 Decision thresholds:
-    0-29   -> ALLOW
-    30-59  -> NOTIFY
-    60-84  -> CHALLENGE
-    85-100 -> BLOCK
+    0-39   -> ALLOW
+    40-69  -> NOTIFY
+    70-100 -> CHALLENGE  (re-auth required, transaction still goes through)
 """
 from __future__ import annotations
 
@@ -22,13 +21,11 @@ SEVERITY_POINTS = {
 
 
 def _decision_for(score: int) -> Decision:
-    if score <= 29:
+    if score <= 39:
         return Decision.ALLOW
-    if score <= 59:
+    if score <= 69:
         return Decision.NOTIFY
-    if score <= 84:
-        return Decision.CHALLENGE
-    return Decision.BLOCK
+    return Decision.CHALLENGE
 
 
 def _scale_ml(anomaly_score: float) -> int:
@@ -64,17 +61,12 @@ def _narrative(decision: Decision, reasons: list[ReasonCode]) -> tuple[str, str]
             "This transaction is slightly outside your normal pattern. We let it through — double-check it.",
             "Show a post-transaction notice.",
         )
-    if decision == Decision.CHALLENGE:
-        top = [r.code for r in reasons if r.severity == Severity.HIGH][:2]
-        if not top:
-            top = [r.code for r in reasons[:2]]
-        tail = f" ({', '.join(top)})" if top else ""
-        return (
-            f"This transaction looks unusual for your typical spending{tail}. Please confirm you meant to send this.",
-            "Show confirmation modal requiring re-authentication.",
-        )
-    # BLOCK
+    # CHALLENGE
+    top = [r.code for r in reasons if r.severity == Severity.HIGH][:2]
+    if not top:
+        top = [r.code for r in reasons[:2]]
+    tail = f" ({', '.join(top)})" if top else ""
     return (
-        "This transaction matches multiple fraud patterns. Please contact TNG support before continuing.",
-        "Hard block. Require contact with support.",
+        f"This transaction looks unusual for your typical spending{tail}. Please verify it's really you before proceeding.",
+        "Show confirmation modal requiring re-authentication. Transaction proceeds on success.",
     )

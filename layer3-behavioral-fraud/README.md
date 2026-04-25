@@ -60,10 +60,9 @@ Models are trained offline via `scripts/train_and_export.py` on each user's tran
 
 | Score | Decision | Frontend action |
 |---|---|---|
-| 0–29 | `ALLOW` | Silent pass |
-| 30–59 | `NOTIFY` | Post-transaction banner |
-| 60–84 | `CHALLENGE` | Modal — require re-auth (PIN / face) |
-| 85–100 | `BLOCK` | Hard block. Contact support. |
+| 0–39 | `ALLOW` | Silent pass |
+| 40–69 | `NOTIFY` | Post-transaction banner |
+| 70–100 | `CHALLENGE` | Re-auth modal (PIN / face) — transaction proceeds on success |
 
 ---
 
@@ -74,7 +73,7 @@ Base URL: `http://localhost:8083` · Swagger: `/docs` · CORS: open (`*`)
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/health` | Liveness check |
-| `POST` | `/api/check_transaction` | Score a transaction |
+| `POST` | `/api/check_transaction` | Score a transaction — returns `ALLOW`, `NOTIFY`, or `CHALLENGE` |
 | `GET` | `/api/user_profile/{user_id}` | Behavioral baseline summary |
 | `POST` | `/api/simulate_transaction` | Demo — inject a tx into in-memory history |
 
@@ -246,8 +245,8 @@ tests/
 
 | user_id | Name | Scenario | Decision | Risk |
 |---|---|---|---|---|
-| user_001 | Aisyah | RM4800 new account @ 23:47 (love scam) | `BLOCK` | 99 |
-| user_002 | Ahmad | 5× RM2000 within 10 min (phone theft) | `BLOCK` | 100 |
+| user_001 | Aisyah | RM4800 new account @ 23:47 (love scam) | `CHALLENGE` | 99 |
+| user_002 | Ahmad | 5× RM2000 within 10 min (phone theft) | `CHALLENGE` | 100 |
 | user_003 | Wei | RM18 QR bubble tea (normal) | `ALLOW` | 15 |
-| user_003 | Wei | RM150 new account @ 03:00 (subtle) | `NOTIFY` | 30 |
-| user_004 | Mak Timah | RM8000 new account @ 20:00 (PDRM scam) | `BLOCK` | 99 |
+| user_003 | Wei | RM150 new account @ 03:00 (subtle) | `ALLOW` | 30 |
+| user_004 | Mak Timah | RM8000 new account @ 20:00 (PDRM scam) | `CHALLENGE` | 99 |

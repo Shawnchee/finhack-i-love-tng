@@ -767,7 +767,7 @@ async function runLiveChecks({
         checkTransaction(transactionPayload)
           .then((r) => {
             const decision = r.decision;
-            if (decision === "BLOCK" || decision === "CHALLENGE") {
+            if (decision === "CHALLENGE") {
               markDoneOk(
                 "behavior",
                 "match",

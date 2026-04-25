@@ -214,7 +214,7 @@ export async function checkSemakMule(
 
 export type TransactionType = "qr_payment" | "duitnow_transfer" | "bill_payment";
 
-export type Layer3Decision = "ALLOW" | "NOTIFY" | "CHALLENGE" | "BLOCK";
+export type Layer3Decision = "ALLOW" | "NOTIFY" | "CHALLENGE";
 export type ReasonSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export interface CheckTransactionArgs {
@@ -272,7 +272,7 @@ export const LAYER3_PERSONAS: Layer3Persona[] = [
       amount: 4800,
       transaction_type: "duitnow_transfer",
       recipient_account: "9999000111",
-      expectedDecision: "BLOCK",
+      expectedDecision: "CHALLENGE",
       expectedRisk: 99,
     },
   },
@@ -284,7 +284,7 @@ export const LAYER3_PERSONAS: Layer3Persona[] = [
       amount: 2000,
       transaction_type: "duitnow_transfer",
       recipient_account: "8888000222",
-      expectedDecision: "BLOCK",
+      expectedDecision: "CHALLENGE",
       expectedRisk: 100,
     },
   },
@@ -296,7 +296,7 @@ export const LAYER3_PERSONAS: Layer3Persona[] = [
       amount: 150,
       transaction_type: "duitnow_transfer",
       recipient_account: "7777000333",
-      expectedDecision: "NOTIFY",
+      expectedDecision: "ALLOW",
       expectedRisk: 30,
     },
   },
@@ -308,7 +308,7 @@ export const LAYER3_PERSONAS: Layer3Persona[] = [
       amount: 8000,
       transaction_type: "duitnow_transfer",
       recipient_account: "6666000444",
-      expectedDecision: "BLOCK",
+      expectedDecision: "CHALLENGE",
       expectedRisk: 99,
     },
   },

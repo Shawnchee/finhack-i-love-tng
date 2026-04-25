@@ -8,10 +8,9 @@ from pydantic import BaseModel, Field
 
 
 class Decision(str, Enum):
-    ALLOW = "ALLOW"         # risk 0-29
-    NOTIFY = "NOTIFY"       # risk 30-59
-    CHALLENGE = "CHALLENGE" # risk 60-84
-    BLOCK = "BLOCK"         # risk 85-100
+    ALLOW = "ALLOW"         # risk 0-39
+    NOTIFY = "NOTIFY"       # risk 40-69
+    CHALLENGE = "CHALLENGE" # risk 70-100
 
 
 class Severity(str, Enum):
