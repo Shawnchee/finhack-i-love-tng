@@ -35,10 +35,10 @@ const messages: Message[] = [
     avatar: "AM",
     avatarBg: "from-orange-500 to-red-600",
     time: "10:15",
-    body: "Bro baca ni, mamat Belanda kena spam call pasal AI trading. Sama gak macam kat sini 😩",
+    body: "Eh tengok ni, MSFT dah turun 31% dari ATH. Reddit pun tengah panik 📉",
     link: {
-      url: "https://www.reddit.com/r/thenetherlands/comments/1ll61t7/word_610_keer_per_dag_gebeld_over_ai_trading/",
-      preview: "reddit.com · r/thenetherlands · AI trading scam discussion",
+      url: "https://www.reddit.com/r/stocks/comments/1shvm71/microsoft_msft_is_down_31_from_its_ath/",
+      preview: "reddit.com · r/stocks · Microsoft (MSFT) discussion",
     },
   },
 ];
