@@ -1,4 +1,4 @@
-name: Build & Push to ECR
+name: Build, Push & Deploy
 
 on:
   push:
@@ -8,6 +8,9 @@ env:
   AWS_REGION: ap-southeast-1
   ECR_BACKEND: 940278683083.dkr.ecr.ap-southeast-1.amazonaws.com/ilovetng-backend
   ECR_FRONTEND: 940278683083.dkr.ecr.ap-southeast-1.amazonaws.com/ilovetng-frontend
+  ECS_CLUSTER: ilovetng-application-cluster
+  ECS_SERVICE_BACKEND: ilovetng-backend-service-m50b2zoq
+  ECS_SERVICE_FRONTEND: ilovetng-frontend-service-1h78j0to
 
 jobs:
   build-and-push:
@@ -50,3 +53,35 @@ jobs:
           tags: |
             ${{ env.ECR_FRONTEND }}:latest
             ${{ env.ECR_FRONTEND }}:${{ github.sha }}
+
+      - name: Render backend task definition
+        id: render-backend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ci/task-definitions/backend.json
+          container-name: backend
+          image: ${{ env.ECR_BACKEND }}:${{ github.sha }}
+
+      - name: Deploy backend to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-backend.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE_BACKEND }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Render frontend task definition
+        id: render-frontend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ci/task-definitions/frontend.json
+          container-name: frontend
+          image: ${{ env.ECR_FRONTEND }}:${{ github.sha }}
+
+      - name: Deploy frontend to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-frontend.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE_FRONTEND }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
