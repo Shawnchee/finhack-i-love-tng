@@ -3,7 +3,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from backend.core.config import config
 
-engine = create_engine(config.db_url, connect_args={"check_same_thread": False})
+_connect_args = {"check_same_thread": False} if config.db_url.startswith("sqlite") else {}
+engine = create_engine(config.db_url, connect_args=_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
