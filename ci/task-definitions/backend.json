@@ -7,10 +7,10 @@
       "cpu": 0,
       "portMappings": [
         {
-          "containerPort": 3000,
-          "hostPort": 3000,
+          "containerPort": 8000,
+          "hostPort": 8000,
           "protocol": "tcp",
-          "name": "backend-3000-tcp",
+          "name": "backend-8000-tcp",
           "appProtocol": "http"
         }
       ],
