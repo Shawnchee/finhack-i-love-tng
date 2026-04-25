@@ -1,11 +1,4 @@
-export type DetectedKind =
-  | "bank"
-  | "link"
-  | "telegram"
-  | "whatsapp"
-  | "unknown";
-
-const WHATSAPP_LINE = /\[\d{1,2}\/\d{1,2}\/\d{2,4},?\s+\d{1,2}:\d{2}/;
+export type DetectedKind = "bank" | "link" | "telegram" | "unknown";
 
 export function detectInput(raw: string): DetectedKind {
   const v = raw.trim();
@@ -14,7 +7,6 @@ export function detectInput(raw: string): DetectedKind {
   if (/^https?:\/\//i.test(v) || /^[a-z0-9-]+\.[a-z]{2,}(\/|$)/i.test(v))
     return "link";
   if (/^\d[\d\s-]{9,18}$/.test(v)) return "bank";
-  if (WHATSAPP_LINE.test(v) || v.split("\n").length > 4) return "whatsapp";
   return "unknown";
 }
 
