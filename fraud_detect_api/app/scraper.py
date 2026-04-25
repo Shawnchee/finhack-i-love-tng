@@ -3,8 +3,11 @@ Web scraper that handles any URL type.
 
 Routing strategy:
   - Reddit URLs      → asyncpraw OAuth API (avoids IP blocks on AWS)
+  - Telegram URLs    → Telethon MTProto API (avoids IP blocks on AWS)
+  - Cari URLs        → camoufox patched-Firefox (Cloudflare bypass)
   - JS-heavy domains → Playwright
   - Everything else  → httpx first, Playwright fallback if content is thin
+  - Blocked domains  → ValueError (Twitter, Instagram not supported)
 
 Content is extracted with trafilatura for all non-Reddit paths.
 Keyword matching runs on the final extracted text.
@@ -28,6 +31,7 @@ from playwright.async_api import Browser
 
 from app.cari_scraper import scrape_cari_thread
 from app.keywords import match_keywords
+from app.telegram_scraper import scrape_telegram_post
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +39,14 @@ _MIN_CONTENT_CHARS = 200
 
 _JS_DOMAINS: frozenset[str] = frozenset(
     {
-        "t.me",
-        "telegram.me",
+        # Telegram is handled via Telethon MTProto — not Playwright
         "youtube.com",
         "linkedin.com",
-        "web.telegram.org",
         "tiktok.com",
     }
 )
+
+_TELEGRAM_DOMAINS: frozenset[str] = frozenset({"t.me", "telegram.me", "web.telegram.org"})
 
 # Require login — scraping is not feasible
 _BLOCKED_DOMAINS: frozenset[str] = frozenset(
@@ -80,7 +84,7 @@ _HTTPX_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# Text cleaning (ported from sec-scraper reddit_scraper._clean)
+
 _RE_WHITESPACE = re.compile(r"[\t\r\f\v]")
 _RE_ZERO_WIDTH = re.compile(r"[\u200b-\u200f\u2060\ufeff]")
 _RE_MULTI_SPACE = re.compile(r" +")
@@ -125,6 +129,11 @@ def _is_blocked(url: str) -> bool:
 def _is_reddit(url: str) -> bool:
     netloc = _netloc(url)
     return netloc == "reddit.com" or netloc.endswith(".reddit.com")
+
+
+def _is_telegram(url: str) -> bool:
+    netloc = _netloc(url)
+    return any(netloc == d or netloc.endswith(f".{d}") for d in _TELEGRAM_DOMAINS)
 
 
 def _is_cari(url: str) -> bool:
@@ -335,6 +344,11 @@ async def scrape(url: str, browser: Browser) -> ScrapeResult:
 
     if _is_reddit(url):
         return await _fetch_reddit_post(url)
+
+    if _is_telegram(url):
+        logger.info("[telegram] Scraping post via Telethon MTProto: %s", url)
+        title, body = await scrape_telegram_post(url)
+        return ScrapeResult(url, "telegram", title, body, used_javascript=False)
 
     if _is_cari(url):
         logger.info("[cari] Scraping thread via camoufox: %s", url)
