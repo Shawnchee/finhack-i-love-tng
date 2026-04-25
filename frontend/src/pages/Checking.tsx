@@ -867,6 +867,13 @@ async function runLiveChecks({
     console.error("[checking] sessionStorage failed", err);
   }
 
+  try {
+    const { appendRecord } = await import("../lib/dashboardStore");
+    appendRecord(report);
+  } catch (err) {
+    console.error("[checking] dashboard store failed", err);
+  }
+
   // Small delay so the user sees the final waypoint flip to done.
   setTimeout(() => navigate(`/report/live`), 450);
 }
