@@ -107,7 +107,7 @@ jobs:
             ${{ env.ECR_FRONTEND }}:latest
             ${{ env.ECR_FRONTEND }}:${{ github.sha }}
           build-args: |
-            VITE_API_URL=http://scambuster-alb-399113752.ap-southeast-1.elb.amazonaws.com
+            VITE_API_URL=http://scambuster-alb-399113752.ap-southeast-1.elb.amazonaws.com:8000
 
       - name: Render frontend task definition
         id: render-frontend
