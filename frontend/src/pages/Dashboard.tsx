@@ -83,7 +83,7 @@ function seedDemoIfEmpty(): void {
     { key: "medium", daysAgo: 4, status: "pending" },
   ];
 
-  seeds.forEach(({ key, daysAgo, status }, i) => {
+  seeds.forEach(({ key, daysAgo }, i) => {
     const r = getMockReport(key);
     const offset = daysAgo * 86400000 + i * 3600000;
     r.id = `demo-${i}-${Date.now()}`;
