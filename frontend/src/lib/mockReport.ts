@@ -14,7 +14,7 @@ export type Verdict = "low" | "medium" | "high";
  * "behavior" is the canonical name for the layer3-behavioral-fraud signal.
  * "chat_model" is kept as a legacy alias so existing page code that still
  * references it continues to type-check while pages migrate.
- */
+ */ 
 export type SourceName =
   | "nfp"
   | "semak_mule"
