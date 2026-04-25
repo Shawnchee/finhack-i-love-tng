@@ -4,8 +4,9 @@ Web scraper that handles any URL type.
 Routing strategy:
   - Reddit URLs      → asyncpraw OAuth API (avoids IP blocks on AWS)
   - Telegram URLs    → Telethon MTProto API (avoids IP blocks on AWS)
+  - TikTok URLs      → oEmbed API (bypasses bot detection)
   - Cari URLs        → camoufox patched-Firefox (Cloudflare bypass)
-  - JS-heavy domains → Playwright
+  - JS-heavy domains → Playwright (YouTube, LinkedIn)
   - Everything else  → httpx first, Playwright fallback if content is thin
   - Blocked domains  → ValueError (Twitter, Instagram not supported)
 
@@ -32,6 +33,7 @@ from playwright.async_api import Browser
 from app.cari_scraper import scrape_cari_thread
 from app.keywords import match_keywords
 from app.telegram_scraper import scrape_telegram_post
+from app.tiktok_scraper import scrape_tiktok_video
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +41,12 @@ _MIN_CONTENT_CHARS = 200
 
 _JS_DOMAINS: frozenset[str] = frozenset(
     {
-        # Telegram is handled via Telethon MTProto — not Playwright
         "youtube.com",
         "linkedin.com",
-        "tiktok.com",
     }
 )
+
+_TIKTOK_DOMAINS: frozenset[str] = frozenset({"tiktok.com"})
 
 _TELEGRAM_DOMAINS: frozenset[str] = frozenset({"t.me", "telegram.me", "web.telegram.org"})
 
@@ -134,6 +136,11 @@ def _is_reddit(url: str) -> bool:
 def _is_telegram(url: str) -> bool:
     netloc = _netloc(url)
     return any(netloc == d or netloc.endswith(f".{d}") for d in _TELEGRAM_DOMAINS)
+
+
+def _is_tiktok(url: str) -> bool:
+    netloc = _netloc(url)
+    return any(netloc == d or netloc.endswith(f".{d}") for d in _TIKTOK_DOMAINS)
 
 
 def _is_cari(url: str) -> bool:
@@ -349,6 +356,11 @@ async def scrape(url: str, browser: Browser) -> ScrapeResult:
         logger.info("[telegram] Scraping post via Telethon MTProto: %s", url)
         title, body = await scrape_telegram_post(url)
         return ScrapeResult(url, "telegram", title, body, used_javascript=False)
+
+    if _is_tiktok(url):
+        logger.info("[tiktok] Fetching video via oEmbed (Playwright fallback if needed): %s", url)
+        title, body = await scrape_tiktok_video(url, browser=browser)
+        return ScrapeResult(url, "tiktok", title, body, used_javascript=False)
 
     if _is_cari(url):
         logger.info("[cari] Scraping thread via camoufox: %s", url)
