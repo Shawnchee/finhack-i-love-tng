@@ -259,6 +259,30 @@ function stateScore(state: SignalState): number {
   return 0; // skipped
 }
 
+function _formatAcc(acc: string): string {
+  const digits = acc.replace(/\D/g, "");
+  return digits.replace(/(.{4})/g, "$1 ").trim();
+}
+
+function _idTypeLabel(t: string): string {
+  switch (t) {
+    case "mykad":
+      return "MyKad";
+    case "bric":
+      return "BRIC";
+    case "police":
+      return "Police ID";
+    case "army":
+      return "Army ID";
+    case "unhcr":
+      return "UNHCR";
+    case "passport":
+      return "Passport";
+    default:
+      return t;
+  }
+}
+
 function buildNfpSignal(nfp?: NFPCheckResponse): SourceSignal {
   if (!nfp) {
     return {
@@ -271,12 +295,21 @@ function buildNfpSignal(nfp?: NFPCheckResponse): SourceSignal {
   const tier = nfp.muleCheck?.muleTier;
   const matched = tier !== null && tier !== undefined && String(tier).trim() !== "";
   const state: SignalState = matched ? "match" : "clean";
+  // Build the headline from real backend fields rather than canned copy.
+  // We have: muleTier (1/2), muleTierDescription ("confirmed"/"suspected"),
+  // idType, idNo. The backend doesn't return narrative text, so this is the
+  // most specific honest statement we can render.
+  const idLabel = _idTypeLabel(nfp.muleCheck?.idType ?? "");
+  const idNo = nfp.muleCheck?.idNo ?? "";
+  const desc = nfp.muleCheck?.muleTierDescription;
+  const headline = matched
+    ? `${idLabel || "ID"} ${idNo} matches a ${desc ? desc + " " : ""}mule on the National Fraud Portal (tier ${tier}).`
+    : `${idLabel || "ID"} ${idNo} is not on the National Fraud Portal.`;
+
   return {
     source: "nfp",
     state,
-    headline: matched
-      ? `NFP flagged this ID at tier ${tier}.`
-      : "No NFP mule tier returned for this ID.",
+    headline,
     evidence: [
       { label: "Status", value: nfp.status ?? "—" },
       { label: "Tier", value: matched ? String(tier) : "—" },
@@ -284,6 +317,8 @@ function buildNfpSignal(nfp?: NFPCheckResponse): SourceSignal {
         label: "Tier description",
         value: nfp.muleCheck?.muleTierDescription ?? "—",
       },
+      { label: "ID type", value: idLabel || "—" },
+      { label: "ID number", value: idNo || "—" },
       { label: "Message", value: nfp.message ?? "—" },
     ],
     raw: nfp,
@@ -301,15 +336,19 @@ function buildSemakSignal(semak?: SemakMuleCheckResponse): SourceSignal {
     };
   }
   const state: SignalState = semak.isMule ? "match" : "clean";
+  const acc = _formatAcc(semak.bankAccountNo);
+  const swift = semak.bankSwiftCode;
+  const headline = semak.isMule
+    ? `${swift} account ${acc} is on the BNM Semak Mule registry.`
+    : `${swift} account ${acc} is not on the BNM Semak Mule registry.`;
+
   return {
     source: "semak_mule",
     state,
-    headline: semak.isMule
-      ? "Account is listed on the BNM Semak Mule registry."
-      : "Not listed on the BNM Semak Mule registry.",
+    headline,
     evidence: [
-      { label: "Account", value: semak.bankAccountNo },
-      { label: "SWIFT", value: semak.bankSwiftCode },
+      { label: "Account", value: acc },
+      { label: "SWIFT", value: swift },
       { label: "Response code", value: semak.responseCode },
       { label: "Response message", value: semak.responseMessage },
     ],
@@ -317,6 +356,18 @@ function buildSemakSignal(semak?: SemakMuleCheckResponse): SourceSignal {
     score: stateScore(state),
   };
 }
+
+// Pretty labels for the LLM's scam-type taxonomy (api.ts ScamCategory).
+const SCAM_CATEGORY_LABEL: Record<string, string> = {
+  CAPITAL_MARKET: "Capital-market scam",
+  ROMANCE: "Romance scam",
+  EMPLOYMENT: "Employment scam",
+  DELIVERY: "Delivery scam",
+  IMPERSONATION: "Impersonation scam",
+  BANKING: "Banking phish",
+  GENERAL: "General scam",
+  UNKNOWN: "Unclassified",
+};
 
 function buildScrapeSignal(scrape?: ScanResponse): SourceSignal {
   if (!scrape) {
@@ -332,6 +383,7 @@ function buildScrapeSignal(scrape?: ScanResponse): SourceSignal {
   const verdict = scrape.verdict;
   const scamConfidence = scrape.scam?.confidence ?? 0;
   const indicators = scrape.scam?.indicators_found ?? [];
+  const indicatorEvidence = scrape.scam?.indicator_evidence ?? {};
 
   // Verdict from the LLM is authoritative when present; otherwise fall back
   // to keyword-count heuristics for the legacy/no-LLM path.
@@ -364,15 +416,33 @@ function buildScrapeSignal(scrape?: ScanResponse): SourceSignal {
     { label: "Verdict", value: verdict ?? "—" },
   ];
 
+  // Scam category (NEW) — the LLM's classification into the 8-category taxonomy.
+  if (scrape.scam_type && scrape.scam_type.category !== "UNKNOWN") {
+    const cat = scrape.scam_type.category;
+    evidence.push({
+      label: "Scam type",
+      value: `${SCAM_CATEGORY_LABEL[cat] ?? cat} (${scrape.scam_type.confidence.toFixed(2)})`,
+    });
+  }
+
   if (scrape.scam) {
     evidence.push({
-      label: "Confidence",
+      label: "Scam confidence",
       value: scamConfidence.toFixed(2),
     });
-    if (indicators.length > 0) {
+    // Surface up to 3 indicators with their evidence quotes inline so the
+    // panel shows *why* the LLM flagged the page, not just the labels.
+    for (const indicator of indicators.slice(0, 3)) {
+      const quote = indicatorEvidence[indicator];
       evidence.push({
-        label: "Indicators",
-        value: indicators.slice(0, 4).join(", "),
+        label: indicator.replace(/_/g, " "),
+        value: quote ? `"${quote}"` : "(no quote returned)",
+      });
+    }
+    if (indicators.length > 3) {
+      evidence.push({
+        label: "Other indicators",
+        value: indicators.slice(3).join(", "),
       });
     }
   }
@@ -382,6 +452,12 @@ function buildScrapeSignal(scrape?: ScanResponse): SourceSignal {
       label: "Capital market",
       value: scrape.regulatory.is_capital_market ? "yes" : "no",
     });
+    if (scrape.regulatory.product_types.length > 0) {
+      evidence.push({
+        label: "Product types",
+        value: scrape.regulatory.product_types.join(", "),
+      });
+    }
   }
 
   if (scrape.localisation) {
@@ -389,6 +465,18 @@ function buildScrapeSignal(scrape?: ScanResponse): SourceSignal {
       label: "Targets Malaysians",
       value: scrape.localisation.targets_malaysians ? "yes" : "no",
     });
+    if (scrape.localisation.languages_detected.length > 0) {
+      evidence.push({
+        label: "Languages",
+        value: scrape.localisation.languages_detected.join(", "),
+      });
+    }
+    if (scrape.localisation.localisation_cues.length > 0) {
+      evidence.push({
+        label: "Localisation cues",
+        value: scrape.localisation.localisation_cues.slice(0, 3).join(" · "),
+      });
+    }
   }
 
   evidence.push({
@@ -434,21 +522,39 @@ function buildBehaviorSignal(layer3?: CheckTransactionResponse): SourceSignal {
     .map((r) => r.code)
     .join(", ");
 
+  // Prefer the backend's plain-language `user_friendly_warning` over our
+  // canned fallbacks — layer3 already produces a tailored sentence per
+  // decision tier (e.g. "This transaction matches multiple fraud patterns…")
+  // and the user explicitly wants that surfaced rather than a generic line.
+  const headline =
+    layer3.user_friendly_warning?.trim() ||
+    (state === "match"
+      ? "Multiple high-severity rules fired."
+      : state === "suspicious"
+        ? "ML flagged unusual amount or timing."
+        : "Transaction looks consistent with this user's normal pattern.");
+
+  const evidence: { label: string; value: string }[] = [
+    { label: "Decision", value: layer3.decision },
+    { label: "Risk score", value: String(layer3.risk_score) },
+    { label: "ML anomaly", value: layer3.ml_anomaly_score.toFixed(4) },
+    { label: "Top reasons", value: topReasons || "—" },
+  ];
+
+  // Surface the backend's recommended next step too — it's a separate field
+  // from the warning and useful as a row in the evidence panel.
+  if (layer3.recommended_action?.trim()) {
+    evidence.push({
+      label: "Recommended action",
+      value: layer3.recommended_action.trim(),
+    });
+  }
+
   return {
     source: "behavior",
     state,
-    headline:
-      state === "match"
-        ? "Multiple high-severity rules fired."
-        : state === "suspicious"
-          ? "ML flagged unusual amount or timing."
-          : "Transaction looks consistent with this user's normal pattern.",
-    evidence: [
-      { label: "Decision", value: layer3.decision },
-      { label: "Risk score", value: String(layer3.risk_score) },
-      { label: "ML anomaly", value: String(layer3.ml_anomaly_score) },
-      { label: "Top reasons", value: topReasons || "—" },
-    ],
+    headline,
+    evidence,
     raw: layer3,
     score: stateScore(state),
   };
@@ -565,6 +671,78 @@ function pickOverall(
   return { overall, score };
 }
 
+/**
+ * Pick a verdict-band summary that prefers real backend prose over canned
+ * copy. Priority order:
+ *   1. Layer3's `user_friendly_warning` when behavior was a match (BLOCK /
+ *      CHALLENGE) — the strongest signal driving a high verdict in many
+ *      transactional flows.
+ *   2. Scrape's `evidence_summary` when the LLM produced a SCAM verdict —
+ *      a tailored 2-4 sentence narrative for officer review.
+ *   3. Stitched factual sentence from any other matched signals (NFP /
+ *      SemakMule). These services don't produce narrative, so we compose
+ *      one from their structured fields.
+ *   4. Generic fallback copy keyed off the overall bucket.
+ */
+function composeSummary(
+  signals: SourceSignal[],
+  responses: BackendResponses,
+  overall: Verdict,
+): string {
+  const layer3 = responses.layer3;
+  const scrape = responses.scrape;
+  const semak = responses.semak;
+  const nfp = responses.nfp;
+
+  // Strongest narrative-producing signals first.
+  if (
+    layer3 &&
+    (layer3.decision === "BLOCK" || layer3.decision === "CHALLENGE") &&
+    layer3.user_friendly_warning?.trim()
+  ) {
+    return layer3.user_friendly_warning.trim();
+  }
+  if (scrape?.verdict === "SCAM" && scrape.evidence_summary?.trim()) {
+    return scrape.evidence_summary.trim();
+  }
+
+  // Stitch a factual line from registry hits.
+  const factualParts: string[] = [];
+  if (semak?.isMule) {
+    factualParts.push(
+      `${semak.bankSwiftCode} account ${_formatAcc(semak.bankAccountNo)} is on the BNM Semak Mule registry`,
+    );
+  }
+  const tier = nfp?.muleCheck?.muleTier;
+  if (tier !== undefined && tier !== null && String(tier).trim() !== "") {
+    const desc = nfp?.muleCheck?.muleTierDescription;
+    factualParts.push(
+      `the ID matches a ${desc ?? "tier " + tier} mule on the National Fraud Portal`,
+    );
+  }
+  if (factualParts.length > 0) {
+    return factualParts.join("; ").replace(/^./, (c) => c.toUpperCase()) + ".";
+  }
+
+  // Layer3 NOTIFY (suspicious) and other soft signals — use the warning even
+  // for non-match decisions if present.
+  if (layer3?.user_friendly_warning?.trim()) {
+    return layer3.user_friendly_warning.trim();
+  }
+  if (scrape?.verdict === "NOT_SCAM" && scrape.evidence_summary?.trim()) {
+    return scrape.evidence_summary.trim();
+  }
+
+  // Last-resort fallbacks — only reached if every backend was skipped or
+  // returned no narrative whatsoever.
+  void signals;
+  return overall === "high"
+    ? "Strong signals this is a scam. Do not transfer."
+    : overall === "medium"
+      ? "Mixed signals. Slow down and double-check before you transfer."
+      : "No strong fraud signals detected across the sources we checked.";
+}
+
 export function buildReportFromBackends(responses: BackendResponses): Report {
   const signals: SourceSignal[] = [
     buildNfpSignal(responses.nfp),
@@ -575,15 +753,13 @@ export function buildReportFromBackends(responses: BackendResponses): Report {
 
   const { overall, score } = pickOverall(signals, responses);
 
-  const summary =
-    overall === "high"
-      ? "Strong signals this is a scam. Do not transfer."
-      : overall === "medium"
-        ? "Mixed signals. Slow down and double-check before you transfer."
-        : "No strong fraud signals detected across the sources we checked.";
+  // Compose the headline summary from real backend narratives. We pick the
+  // strongest signal that produced a *human-written* sentence and lead with
+  // that. Generic copy is only used when no backend gave us text to render.
+  const summary = composeSummary(signals, responses, overall);
 
   const recommendation =
-    responses.layer3?.recommended_action ??
+    responses.layer3?.recommended_action?.trim() ||
     (overall === "high"
       ? "Do not transfer. Block this contact, save the evidence, and report to NFCC at 997."
       : overall === "medium"

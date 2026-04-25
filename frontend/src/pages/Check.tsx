@@ -7,12 +7,13 @@ import {
   X,
   Lock,
   CheckCircle2,
+  Info,
 } from "lucide-react";
 import { detectInput, MALAYSIAN_BANKS, type DetectedKind } from "../lib/detect";
 import { cn } from "../lib/cn";
 import { AnimatePresence, motion } from "framer-motion";
 import Magnet from "../components/Magnet";
-import type { IdType, TransactionType } from "../lib/api";
+import { LAYER3_PERSONAS, type IdType, type TransactionType } from "../lib/api";
 
 const TX_TYPES: { code: TransactionType; name: string }[] = [
   { code: "duitnow_transfer", name: "DuitNow transfer" },
@@ -189,6 +190,8 @@ export default function Check() {
           <Lock className="w-3 h-3" strokeWidth={2} />
           Ephemeral by design. We don't save what you paste.
         </div>
+
+        <SupportedPlatforms />
       </section>
 
       {/* TOGGLES */}
@@ -295,8 +298,8 @@ export default function Check() {
             className="w-full rounded-xl border border-rule focus:border-blue bg-white px-4 py-3 text-sm font-mono tabular text-ink outline-none"
           />
           <p className="mt-2 text-xs text-ink-muted">
-            Chat-behaviour scoring is in development — we'll log the handle for
-            now and flag it on the report.
+            We'll fetch the latest post via Telegram's MTProto API and run it
+            through the link-scan classifier.
           </p>
         </Disclosure>
 
@@ -307,18 +310,35 @@ export default function Check() {
           hint="Score this against a TNG user's behavioral baseline."
         >
           <div className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_140px] gap-3">
-              <label className="block">
-                <span className="text-[11px] uppercase tracking-wider text-ink-muted">
-                  TNG user ID
-                </span>
-                <input
-                  value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
-                  placeholder="user_001"
-                  className="mt-1 w-full rounded-xl border border-rule focus:border-blue bg-white px-4 py-3 text-sm font-mono tabular text-ink outline-none"
-                />
-              </label>
+            <label className="relative block">
+              <span className="text-[11px] uppercase tracking-wider text-ink-muted">
+                TNG user (persona)
+              </span>
+              <select
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                className="mt-1 w-full appearance-none rounded-xl border border-rule bg-white px-4 py-3 pr-9 text-sm font-medium text-ink outline-none focus:border-blue"
+              >
+                {LAYER3_PERSONAS.map((p) => (
+                  <option key={p.user_id} value={p.user_id}>
+                    {p.user_id} · {p.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 absolute right-3 bottom-3.5 text-ink-muted pointer-events-none" />
+            </label>
+            {(() => {
+              const persona = LAYER3_PERSONAS.find((p) => p.user_id === userId);
+              if (!persona) return null;
+              return (
+                <p className="text-xs text-ink-muted -mt-1">
+                  <span className="text-ink font-medium">{persona.name}'s</span>{" "}
+                  demo scenario: {persona.scenario}.
+                </p>
+              );
+            })()}
+
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_180px] gap-3">
               <label className="block">
                 <span className="text-[11px] uppercase tracking-wider text-ink-muted">
                   Amount (RM)
@@ -333,8 +353,6 @@ export default function Check() {
                   className="mt-1 w-full rounded-xl border border-rule focus:border-blue bg-white px-4 py-3 text-sm font-mono tabular text-ink outline-none"
                 />
               </label>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-3">
               <label className="relative block">
                 <span className="text-[11px] uppercase tracking-wider text-ink-muted">
                   Type
@@ -352,22 +370,24 @@ export default function Check() {
                 </select>
                 <ChevronDown className="w-4 h-4 absolute right-3 bottom-3.5 text-ink-muted pointer-events-none" />
               </label>
-              <label className="block">
-                <span className="text-[11px] uppercase tracking-wider text-ink-muted">
-                  Recipient name (optional)
-                </span>
-                <input
-                  value={recipientName}
-                  onChange={(e) => setRecipientName(e.target.value)}
-                  placeholder="Unknown"
-                  className="mt-1 w-full rounded-xl border border-rule focus:border-blue bg-white px-4 py-3 text-sm text-ink outline-none"
-                />
-              </label>
             </div>
+
+            <label className="block">
+              <span className="text-[11px] uppercase tracking-wider text-ink-muted">
+                Recipient name (optional)
+              </span>
+              <input
+                value={recipientName}
+                onChange={(e) => setRecipientName(e.target.value)}
+                placeholder="Unknown"
+                className="mt-1 w-full rounded-xl border border-rule focus:border-blue bg-white px-4 py-3 text-sm text-ink outline-none"
+              />
+            </label>
+
             <p className="text-xs text-ink-muted">
               Sent to the layer-3 behavioral scorer with the bank account
-              above. Without these we use sensible defaults
-              (user_001, RM100, DuitNow).
+              above. Without these we use sensible defaults (user_001,
+              RM100, DuitNow).
             </p>
           </div>
         </Disclosure>
@@ -404,6 +424,98 @@ export default function Check() {
         </div>
       </div>
     </main>
+  );
+}
+
+// Mirrors the routing in fraud_detect_api/app/scraper.py — keep in sync if
+// the backend's _PLATFORM_MAP / _BLOCKED_DOMAINS change.
+const SUPPORTED_PLATFORMS: { name: string; via: string }[] = [
+  { name: "Reddit posts", via: "reddit.com — OAuth API (post + top comments)" },
+  { name: "Telegram", via: "t.me/{channel} or @handle — Telethon MTProto" },
+  { name: "YouTube", via: "youtube.com — JS-rendered description" },
+  { name: "TikTok", via: "tiktok.com — JS-rendered caption" },
+  { name: "LinkedIn", via: "linkedin.com — public posts only" },
+  { name: "Cari forum", via: "cari.com.my — Cloudflare bypass" },
+  { name: "Lowyat", via: "lowyat.net" },
+  { name: "Blogs", via: "Medium, Substack, WordPress, Blogspot" },
+  { name: "Any public webpage", via: "httpx + Playwright fallback" },
+];
+
+const BLOCKED_PLATFORMS = [
+  "Twitter / X",
+  "Facebook",
+  "Instagram",
+];
+
+function SupportedPlatforms() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 text-xs text-ink-muted hover:text-ink min-h-[32px] -my-1 touch-manipulation"
+      >
+        <Info className="w-3 h-3" strokeWidth={2} />
+        {open ? "Hide supported platforms" : "What links can we scan?"}
+        <ChevronDown
+          className={cn("w-3 h-3 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 rounded-xl border border-rule bg-surface/60 p-4 space-y-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-ink-muted mb-2">
+                  Supported
+                </div>
+                <ul className="space-y-1.5 text-xs text-ink">
+                  {SUPPORTED_PLATFORMS.map((p) => (
+                    <li key={p.name} className="flex items-baseline gap-2">
+                      <CheckCircle2
+                        className="w-3 h-3 text-good shrink-0 translate-y-0.5"
+                        strokeWidth={2.2}
+                      />
+                      <span className="font-medium">{p.name}</span>
+                      <span className="text-ink-muted">— {p.via}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-ink-muted mb-2">
+                  Not supported (login required)
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {BLOCKED_PLATFORMS.map((b) => (
+                    <span
+                      key={b}
+                      className="inline-flex items-center rounded-full border border-rule bg-white px-2.5 py-0.5 text-[11px] text-ink-muted"
+                    >
+                      {b}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-ink-muted leading-relaxed pt-1 border-t border-rule">
+                After scraping, the LLM classifier judges the page across four
+                dimensions — regulatory scope, Malaysian targeting, scam
+                indicators — and produces a final{" "}
+                <span className="font-mono">SCAM</span> /{" "}
+                <span className="font-mono">NOT_SCAM</span> verdict with
+                evidence.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 

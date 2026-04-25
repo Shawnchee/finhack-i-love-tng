@@ -16,7 +16,7 @@ export const MULE_API_URL: string =
 export const LAYER3_API_URL: string =
   (import.meta.env.VITE_LAYER3_API_URL as string | undefined) ?? "http://localhost:8083";
 export const SCRAPE_API_URL: string =
-  (import.meta.env.VITE_SCRAPE_API_URL as string | undefined) ?? "http://localhost:8081";
+  (import.meta.env.VITE_SCRAPE_API_URL as string | undefined) ?? "http://localhost:8082";
 
 // ---------------------------------------------------------------------------
 // Bank → SWIFT map (used when calling checkSemakMule)
@@ -244,6 +244,76 @@ export interface ReasonCode {
   details?: Record<string, unknown> | null;
 }
 
+/**
+ * Personas seeded into the layer3 service (see layer3-behavioral-fraud/README.md).
+ * One trained Isolation Forest per user; demo scenarios documented inline so
+ * the frontend can offer a discoverable dropdown of known-good test inputs.
+ */
+export interface Layer3Persona {
+  user_id: string;
+  name: string;
+  scenario: string;
+  /** Suggested transaction that produces the documented decision for this persona. */
+  demo: {
+    amount: number;
+    transaction_type: TransactionType;
+    recipient_account: string;
+    expectedDecision: Layer3Decision;
+    expectedRisk: number;
+  };
+}
+
+export const LAYER3_PERSONAS: Layer3Persona[] = [
+  {
+    user_id: "user_001",
+    name: "Aisyah",
+    scenario: "RM4800 to new account at 23:47 — love-scam pattern",
+    demo: {
+      amount: 4800,
+      transaction_type: "duitnow_transfer",
+      recipient_account: "9999000111",
+      expectedDecision: "BLOCK",
+      expectedRisk: 99,
+    },
+  },
+  {
+    user_id: "user_002",
+    name: "Ahmad",
+    scenario: "5× RM2000 within 10 minutes — phone-theft pattern",
+    demo: {
+      amount: 2000,
+      transaction_type: "duitnow_transfer",
+      recipient_account: "8888000222",
+      expectedDecision: "BLOCK",
+      expectedRisk: 100,
+    },
+  },
+  {
+    user_id: "user_003",
+    name: "Wei",
+    scenario: "RM150 to new account at 03:00 — subtle anomaly",
+    demo: {
+      amount: 150,
+      transaction_type: "duitnow_transfer",
+      recipient_account: "7777000333",
+      expectedDecision: "NOTIFY",
+      expectedRisk: 30,
+    },
+  },
+  {
+    user_id: "user_004",
+    name: "Mak Timah",
+    scenario: "RM8000 to new account at 20:00 — PDRM-impersonation scam",
+    demo: {
+      amount: 8000,
+      transaction_type: "duitnow_transfer",
+      recipient_account: "6666000444",
+      expectedDecision: "BLOCK",
+      expectedRisk: 99,
+    },
+  },
+];
+
 export interface CheckTransactionResponse {
   decision: Layer3Decision;
   risk_score: number;
@@ -291,7 +361,17 @@ export async function getUserProfile(user_id: string): Promise<UserProfileRespon
 // 5) fraud_detect_api — URL scan (scrape + LLM classification)
 // ===========================================================================
 
-export type ScamVerdict = "SCAM" | "NOT_SCAM";
+export type ScamVerdict = "SCAM" | "NOT_SCAM" | "NEEDS_REVIEW";
+
+export type ScamCategory =
+  | "CAPITAL_MARKET"
+  | "ROMANCE"
+  | "EMPLOYMENT"
+  | "DELIVERY"
+  | "IMPERSONATION"
+  | "BANKING"
+  | "GENERAL"
+  | "UNKNOWN";
 
 export interface RegulatoryDetail {
   is_capital_market: boolean;
@@ -304,6 +384,12 @@ export interface LocalisationDetail {
   targets_malaysians: boolean;
   localisation_cues: string[];
   languages_detected: string[];
+  reasoning: string;
+}
+
+export interface ScamTypeDetail {
+  category: ScamCategory;
+  confidence: number;
   reasoning: string;
 }
 
@@ -331,6 +417,7 @@ export interface ScanResponse {
   // Classification (null when classification was skipped or failed upstream)
   regulatory: RegulatoryDetail | null;
   localisation: LocalisationDetail | null;
+  scam_type: ScamTypeDetail | null;
   scam: ScamDetail | null;
   verdict: ScamVerdict | null;
   evidence_summary: string | null;

@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
+  AlertOctagon,
   CheckCircle2,
   ChevronDown,
   Info,
@@ -26,6 +27,7 @@ import {
   type SourceSignal,
   type Verdict,
 } from "../lib/mockReport";
+import type { ScanResponse } from "../lib/api";
 import { cn } from "../lib/cn";
 
 const VERDICT_COPY: Record<Verdict, { word: string; label: string }> = {
@@ -48,9 +50,10 @@ export default function Report() {
       } catch (err) {
         console.error("[report] failed to read lastReport", err);
       }
-      // No live report stored — fall back to a high mock so the page still
-      // renders something useful instead of crashing.
-      return getMockReport("high");
+      // No live report stored (e.g. user navigated to /report/live directly,
+      // or sessionStorage was cleared). Fall back to a low mock — absence of
+      // evidence shouldn't render as a HIGH RISK verdict.
+      return getMockReport("low");
     }
     return getMockReport(mockParam || id);
   }, [id, mockParam]);
@@ -265,18 +268,227 @@ function ScanInputsSidebar({ inputs }: { inputs: ReportType["inputs"] }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Scraped content with red/green keyword highlighting.
+//
+// Splits the body into [text, match, text, match, ...] segments using the
+// LLM-supplied indicator quotes. Each match is rendered with a red
+// background so users can see *exactly* which phrases triggered the verdict.
+// For NOT_SCAM pages we show a soft green-tinted block with a "no flagged
+// phrases" note instead, which still gives a positive visual signal.
+// ---------------------------------------------------------------------------
+
+const _MAX_BODY_CHARS = 2400;
+
+function _normalize(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Splits `body` into alternating plain / highlighted segments. The split is
+ * case-insensitive and operates on the raw text — overlapping matches are
+ * resolved by greedy left-to-right scanning. Returns at most ~10 highlights.
+ */
+function splitWithHighlights(
+  body: string,
+  quotes: string[],
+): { text: string; highlight: boolean }[] {
+  if (!body) return [];
+  // Dedupe + clean quotes, keep only those long enough to be meaningful.
+  const cleaned = Array.from(
+    new Set(
+      quotes
+        .map(_normalize)
+        .filter((q) => q.length >= 4 && q.length <= 300),
+    ),
+  );
+  if (cleaned.length === 0) return [{ text: body, highlight: false }];
+
+  const lower = body.toLowerCase();
+  type Range = { start: number; end: number };
+  const ranges: Range[] = [];
+
+  for (const q of cleaned) {
+    const target = q.toLowerCase();
+    let from = 0;
+    let hits = 0;
+    while (hits < 3) {
+      const idx = lower.indexOf(target, from);
+      if (idx === -1) break;
+      ranges.push({ start: idx, end: idx + target.length });
+      from = idx + target.length;
+      hits++;
+    }
+  }
+  if (ranges.length === 0) return [{ text: body, highlight: false }];
+
+  // Merge overlapping ranges, sort by start.
+  ranges.sort((a, b) => a.start - b.start);
+  const merged: Range[] = [];
+  for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r.start <= last.end) {
+      last.end = Math.max(last.end, r.end);
+    } else {
+      merged.push({ ...r });
+    }
+  }
+
+  const out: { text: string; highlight: boolean }[] = [];
+  let cursor = 0;
+  for (const r of merged) {
+    if (r.start > cursor) {
+      out.push({ text: body.slice(cursor, r.start), highlight: false });
+    }
+    out.push({ text: body.slice(r.start, r.end), highlight: true });
+    cursor = r.end;
+  }
+  if (cursor < body.length) {
+    out.push({ text: body.slice(cursor), highlight: false });
+  }
+  return out;
+}
+
+function ScrapedContent({ scrape }: { scrape: ScanResponse }) {
+  const verdict = scrape.verdict;
+  const body = scrape.body || "";
+  const quotes = Object.values(scrape.scam?.indicator_evidence ?? {});
+  const truncated = body.length > _MAX_BODY_CHARS;
+  const trimmed = truncated ? body.slice(0, _MAX_BODY_CHARS) : body;
+  const segments = splitWithHighlights(trimmed, quotes);
+  const highlightCount = segments.filter((s) => s.highlight).length;
+
+  if (!body) return null;
+
+  const isScam = verdict === "SCAM";
+  const isSafe = verdict === "NOT_SCAM";
+
+  return (
+    <div className="px-6 pb-6">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[10px] uppercase tracking-[0.2em] text-ink-muted">
+          Page content
+        </div>
+        {isScam && highlightCount > 0 && (
+          <div className="inline-flex items-center gap-1.5 text-[11px] text-bad font-medium">
+            <AlertOctagon className="w-3 h-3" strokeWidth={2.4} />
+            {highlightCount} flagged phrase{highlightCount === 1 ? "" : "s"}
+          </div>
+        )}
+        {isSafe && (
+          <div className="inline-flex items-center gap-1.5 text-[11px] text-good font-medium">
+            <CheckCircle2 className="w-3 h-3" strokeWidth={2.4} />
+            No flagged phrases
+          </div>
+        )}
+      </div>
+      <div
+        className={cn(
+          "rounded-xl border p-4 text-[13px] leading-relaxed font-mono whitespace-pre-wrap break-words max-h-[280px] overflow-y-auto",
+          isScam
+            ? "border-bad/30 bg-bad/5"
+            : isSafe
+              ? "border-good/30 bg-good/5"
+              : "border-rule bg-white",
+        )}
+      >
+        {segments.map((seg, i) =>
+          seg.highlight ? (
+            <mark
+              key={i}
+              className="bg-bad/20 text-bad font-semibold rounded px-1 -mx-0.5 ring-1 ring-bad/40"
+            >
+              {seg.text}
+            </mark>
+          ) : (
+            <span key={i}>{seg.text}</span>
+          ),
+        )}
+        {truncated && (
+          <span className="text-ink-muted">
+            {"\n\n"}… (truncated, {(body.length - _MAX_BODY_CHARS).toLocaleString()}{" "}
+            more chars)
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScamBanner() {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="bg-bad text-white px-5 py-3 flex items-center gap-2.5"
+      role="alert"
+      aria-live="polite"
+    >
+      <motion.span
+        animate={{ scale: [1, 1.15, 1] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+        className="inline-flex"
+      >
+        <AlertOctagon className="w-5 h-5" strokeWidth={2.4} />
+      </motion.span>
+      <div>
+        <div className="text-sm font-semibold tracking-wide uppercase">
+          Scam detected
+        </div>
+        <div className="text-[11px] opacity-90 leading-tight">
+          Do not engage. Do not transfer money.
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function SafeBanner() {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="bg-good/10 border-b border-good/30 text-good px-5 py-2.5 flex items-center gap-2"
+    >
+      <CheckCircle2 className="w-4 h-4" strokeWidth={2.4} />
+      <div className="text-xs font-medium uppercase tracking-wide">
+        Looks safe
+      </div>
+    </motion.div>
+  );
+}
+
 function SignalCard({ signal }: { signal: SourceSignal }) {
   const [open, setOpen] = useState(false);
   const chip = chipMeta(signal.state);
   const Icon = sourceIcon(signal.source);
+
+  // For link-scrape cards, pull the LLM verdict so we can render a strong
+  // SCAM / NOT_SCAM banner that the eye picks up before any chip.
+  const llmVerdict =
+    signal.source === "link_scrape"
+      ? (signal.raw as ScanResponse | undefined)?.verdict ?? null
+      : null;
 
   return (
     <motion.div
       initial={{ y: 12, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.4, ease: [0.25, 1, 0.5, 1] }}
-      className="rounded-2xl border border-rule bg-white overflow-hidden"
+      className={cn(
+        "rounded-2xl border bg-white overflow-hidden transition-shadow",
+        llmVerdict === "SCAM"
+          ? "border-2 border-bad shadow-[0_0_0_4px_#D1434314]"
+          : llmVerdict === "NOT_SCAM"
+            ? "border-2 border-good shadow-[0_0_0_4px_#0BA66C14]"
+            : "border-rule",
+      )}
     >
+      {llmVerdict === "SCAM" && <ScamBanner />}
+      {llmVerdict === "NOT_SCAM" && <SafeBanner />}
+
       <div className="p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -341,6 +553,9 @@ function SignalCard({ signal }: { signal: SourceSignal }) {
                 </div>
               ))}
             </dl>
+            {signal.source === "link_scrape" && signal.raw ? (
+              <ScrapedContent scrape={signal.raw as ScanResponse} />
+            ) : null}
           </motion.div>
         )}
       </AnimatePresence>
