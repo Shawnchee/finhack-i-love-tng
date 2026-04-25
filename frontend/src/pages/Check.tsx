@@ -4,7 +4,6 @@ import {
   ArrowUpRight,
   ChevronDown,
   Plus,
-  Upload,
   X,
   Lock,
   CheckCircle2,
@@ -13,48 +12,99 @@ import { detectInput, MALAYSIAN_BANKS, type DetectedKind } from "../lib/detect";
 import { cn } from "../lib/cn";
 import { AnimatePresence, motion } from "framer-motion";
 import Magnet from "../components/Magnet";
+import type { IdType } from "../lib/api";
 
 const KIND_LABEL: Record<DetectedKind, string> = {
   bank: "Bank account",
   link: "Link",
-  telegram: "Telegram handle",
-  whatsapp: "WhatsApp chat",
+  telegram: "Telegram channel",
   unknown: "",
 };
+
+const ID_TYPES: { code: IdType; name: string }[] = [
+  { code: "mykad", name: "MyKad" },
+  { code: "bric", name: "BRIC" },
+  { code: "police", name: "Police ID" },
+  { code: "army", name: "Army ID" },
+  { code: "unhcr", name: "UNHCR" },
+  { code: "passport", name: "Passport" },
+];
+
+/** Pick a mock= verdict if the smart input contains one of the demo strings. */
+function detectMockOverride(smart: string): "high" | "medium" | "low" | null {
+  const m = /mock=(high|medium|low)/i.exec(smart);
+  if (!m) return null;
+  return m[1].toLowerCase() as "high" | "medium" | "low";
+}
+
+export interface CheckSubmitPayload {
+  smart: string;
+  bank: string | null;
+  account: string | null;
+  idType: IdType | null;
+  idNo: string | null;
+  tgHandle: string | null;
+  detectedKind: DetectedKind;
+}
 
 export default function Check() {
   const navigate = useNavigate();
   const [smart, setSmart] = useState("");
   const [showBank, setShowBank] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showId, setShowId] = useState(false);
   const [bank, setBank] = useState("MBB");
   const [account, setAccount] = useState("");
-  const [chatMode, setChatMode] = useState<"upload" | "telegram">("telegram");
   const [tgHandle, setTgHandle] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [idType, setIdType] = useState<IdType>("mykad");
+  const [idNo, setIdNo] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const detected = useMemo(() => detectInput(smart), [smart]);
 
   const accountValid =
-    !showBank || (/^\d{10,17}$/.test(account.replace(/\s|-/g, "")));
+    !showBank || /^\d{10,17}$/.test(account.replace(/\s|-/g, ""));
+
+  const idValid = !showId || idNo.trim().length >= 3;
 
   const hasAnyInput =
     detected !== "unknown" ||
     (showBank && accountValid && account.length > 0) ||
-    (showChat && (tgHandle.length > 2 || file));
+    (showChat && tgHandle.trim().length > 2) ||
+    (showId && idValid && idNo.trim().length > 0);
 
-  const onSubmit = () => {
-    if (!hasAnyInput) return;
-    // Pick demo mode based on the strongest signal in inputs
-    const param =
-      detected === "telegram" && tgHandle.includes("officer")
-        ? "high"
-        : showBank && account.startsWith("417")
-        ? "high"
-        : detected === "link" && smart.includes(".top")
-        ? "medium"
-        : "medium";
-    navigate(`/checking?mock=${param}`);
+  const onSubmit = async () => {
+    if (!hasAnyInput || submitting) return;
+    setSubmitting(true);
+    try {
+      // Demo escape hatch: if the user pasted a literal "mock=high|medium|low"
+      // anywhere in the smart input, keep the old fully-mock animation.
+      const mockOverride = detectMockOverride(smart);
+      if (mockOverride) {
+        const payload = { smart, mockOverride };
+        console.log("[check] submit (mock) →", payload);
+        navigate(`/checking?mock=${mockOverride}`);
+        return;
+      }
+
+      const cleanedAccount = account.replace(/\s|-/g, "");
+
+      const payload: CheckSubmitPayload = {
+        smart,
+        bank: showBank && cleanedAccount.length > 0 ? bank : null,
+        account: showBank && cleanedAccount.length > 0 ? cleanedAccount : null,
+        idType: showId && idNo.trim().length > 0 ? idType : null,
+        idNo: showId && idNo.trim().length > 0 ? idNo.trim() : null,
+        tgHandle:
+          showChat && tgHandle.trim().length > 0 ? tgHandle.trim() : null,
+        detectedKind: detected,
+      };
+
+      console.log("[check] submit →", payload);
+      navigate("/checking", { state: payload });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -68,8 +118,8 @@ export default function Check() {
           Paste anything <span className="italic">suspicious.</span>
         </h1>
         <p className="mt-5 text-ink-muted leading-relaxed max-w-xl">
-          Account number, URL, WhatsApp export, or @telegram_handle. We'll
-          figure out what it is and check the right sources.
+          Account number, URL, or @telegram_channel. We'll figure out what it
+          is and check the right sources.
         </p>
       </section>
 
@@ -86,7 +136,7 @@ export default function Check() {
           <textarea
             value={smart}
             onChange={(e) => setSmart(e.target.value)}
-            placeholder="e.g. @quickdealmy · 512298443712 · https://offer.my/..."
+            placeholder="e.g. @scamdealchannel · 512298443712 · https://offer.my/..."
             rows={3}
             className={cn(
               "w-full resize-none bg-transparent rounded-2xl px-5 py-5 text-base md:text-lg text-ink placeholder:text-ink-muted/60 outline-none font-mono leading-relaxed",
@@ -164,59 +214,64 @@ export default function Check() {
         </Disclosure>
 
         <Disclosure
+          open={showId}
+          onToggle={() => setShowId((v) => !v)}
+          label="Add ID for NFP check"
+          hint="National Fraud Portal cross-checks an ID number against reported mules."
+        >
+          <div className="grid grid-cols-1 md:grid-cols-[160px_1fr] gap-3">
+            <label className="relative">
+              <span className="sr-only">ID type</span>
+              <select
+                value={idType}
+                onChange={(e) => setIdType(e.target.value as IdType)}
+                className="w-full appearance-none rounded-xl border border-rule bg-white px-4 py-3 text-sm font-medium text-ink pr-9 outline-none focus:border-blue"
+              >
+                {ID_TYPES.map((t) => (
+                  <option key={t.code} value={t.code}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 absolute right-3 top-3.5 text-ink-muted pointer-events-none" />
+            </label>
+            <div>
+              <input
+                value={idNo}
+                onChange={(e) => setIdNo(e.target.value)}
+                placeholder="ID number"
+                className={cn(
+                  "w-full rounded-xl border bg-white px-4 py-3 text-sm font-mono tabular text-ink outline-none",
+                  idNo && !idValid
+                    ? "border-bad"
+                    : "border-rule focus:border-blue",
+                )}
+              />
+              {idNo && !idValid && (
+                <p className="mt-2 text-xs text-bad">
+                  ID numbers are at least 3 characters.
+                </p>
+              )}
+            </div>
+          </div>
+        </Disclosure>
+
+        <Disclosure
           open={showChat}
           onToggle={() => setShowChat((v) => !v)}
-          label="Add chat"
-          hint="WhatsApp .txt export or a Telegram channel/user handle."
+          label="Add Telegram channel"
+          hint="A Telegram @channel we should look at."
         >
-          <div>
-            <div className="inline-flex p-1 rounded-full bg-surface border border-rule mb-4 text-xs">
-              {(["telegram", "upload"] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setChatMode(m)}
-                  className={cn(
-                    "inline-flex items-center min-h-[36px] px-3 py-1.5 rounded-full font-medium transition-colors touch-manipulation",
-                    chatMode === m
-                      ? "bg-white text-ink shadow-sm"
-                      : "text-ink-muted hover:text-ink",
-                  )}
-                >
-                  {m === "telegram" ? "Telegram handle" : "WhatsApp upload"}
-                </button>
-              ))}
-            </div>
-
-            {chatMode === "telegram" ? (
-              <input
-                value={tgHandle}
-                onChange={(e) => setTgHandle(e.target.value)}
-                placeholder="@channelname"
-                className="w-full rounded-xl border border-rule focus:border-blue bg-white px-4 py-3 text-sm font-mono tabular text-ink outline-none"
-              />
-            ) : (
-              <label
-                className={cn(
-                  "block rounded-xl border-2 border-dashed px-6 py-10 text-center cursor-pointer transition-colors",
-                  file ? "border-blue bg-blue-soft" : "border-rule hover:border-ink-muted",
-                )}
-              >
-                <input
-                  type="file"
-                  accept=".txt"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  className="hidden"
-                />
-                <Upload className="w-5 h-5 mx-auto text-ink-muted" strokeWidth={1.75} />
-                <div className="mt-2 text-sm text-ink">
-                  {file ? file.name : "Drop WhatsApp export or click to choose"}
-                </div>
-                <div className="text-xs text-ink-muted mt-1">
-                  .txt file · exported without media
-                </div>
-              </label>
-            )}
-          </div>
+          <input
+            value={tgHandle}
+            onChange={(e) => setTgHandle(e.target.value)}
+            placeholder="@channelname"
+            className="w-full rounded-xl border border-rule focus:border-blue bg-white px-4 py-3 text-sm font-mono tabular text-ink outline-none"
+          />
+          <p className="mt-2 text-xs text-ink-muted">
+            Chat-behaviour scoring is in development — we'll log the handle for
+            now and flag it on the report.
+          </p>
         </Disclosure>
       </section>
 
@@ -235,16 +290,16 @@ export default function Check() {
           </div>
           <Magnet strength={6}>
             <button
-              disabled={!hasAnyInput}
+              disabled={!hasAnyInput || submitting}
               onClick={onSubmit}
               className={cn(
                 "inline-flex items-center gap-2 px-6 py-3.5 min-h-[48px] rounded-full font-medium transition-all touch-manipulation w-full sm:w-auto justify-center",
-                hasAnyInput
+                hasAnyInput && !submitting
                   ? "bg-blue text-white hover:bg-[#004a9e] shadow-card"
                   : "bg-surface text-ink-muted cursor-not-allowed",
               )}
             >
-              Run risk check
+              {submitting ? "Preparing…" : "Run risk check"}
               <ArrowUpRight className="w-4 h-4" />
             </button>
           </Magnet>

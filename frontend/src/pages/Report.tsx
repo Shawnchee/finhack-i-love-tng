@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
+  Activity,
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
@@ -18,7 +19,13 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import BlurText from "../components/BlurText";
 import CountUp from "../components/CountUp";
-import { getMockReport, SOURCE_LABEL, type SourceSignal, type Verdict } from "../lib/mockReport";
+import {
+  getMockReport,
+  SOURCE_LABEL,
+  type Report as ReportType,
+  type SourceSignal,
+  type Verdict,
+} from "../lib/mockReport";
 import { cn } from "../lib/cn";
 
 const VERDICT_COPY: Record<Verdict, { word: string; label: string }> = {
@@ -30,13 +37,34 @@ const VERDICT_COPY: Record<Verdict, { word: string; label: string }> = {
 export default function Report() {
   const { id } = useParams();
   const [params] = useSearchParams();
-  const mock = params.get("mock") || id;
-  const report = useMemo(() => getMockReport(mock), [mock]);
+  const mockParam = params.get("mock");
+
+  const report = useMemo<ReportType>(() => {
+    // Live report: route id is "live" and there's no ?mock= override.
+    if (id === "live" && !mockParam) {
+      try {
+        const raw = sessionStorage.getItem("lastReport");
+        if (raw) return JSON.parse(raw) as ReportType;
+      } catch (err) {
+        console.error("[report] failed to read lastReport", err);
+      }
+      // No live report stored — fall back to a high mock so the page still
+      // renders something useful instead of crashing.
+      return getMockReport("high");
+    }
+    return getMockReport(mockParam || id);
+  }, [id, mockParam]);
+
   const v = report.overall;
 
   return (
     <main className="pb-24">
-      <VerdictBand verdict={v} score={report.score} summary={report.summary} />
+      <VerdictBand
+        verdict={v}
+        score={report.score}
+        summary={report.summary}
+        inputs={report.inputs}
+      />
 
       <section className="mx-auto max-w-6xl px-5 md:px-8 mt-16 md:mt-20">
         <div className="flex items-end justify-between mb-6">
@@ -50,7 +78,7 @@ export default function Report() {
           </div>
           <div className="hidden md:flex items-center gap-2 text-xs text-ink-muted">
             <Clock className="w-3.5 h-3.5" />
-            Ran just now · 4 sources
+            Ran just now · {report.signals.filter((s) => s.state !== "skipped").length} sources
           </div>
         </div>
 
@@ -84,10 +112,12 @@ function VerdictBand({
   verdict,
   score,
   summary,
+  inputs,
 }: {
   verdict: Verdict;
   score: number;
   summary: string;
+  inputs: ReportType["inputs"];
 }) {
   const { word, label } = VERDICT_COPY[verdict];
   const ringColor =
@@ -119,7 +149,10 @@ function VerdictBand({
             {label}
           </div>
 
-          <h1 className="mt-5 font-display text-[44px] sm:text-[56px] md:text-[112px] leading-[0.92] tracking-tight text-ink break-words">
+          <h1
+            aria-live="polite"
+            className="mt-5 font-display text-[44px] sm:text-[56px] md:text-[112px] leading-[0.92] tracking-tight text-ink break-words"
+          >
             <BlurText text={word} by="letter" delay={0.1} />
           </h1>
 
@@ -152,36 +185,83 @@ function VerdictBand({
           </div>
         </div>
 
-        <aside className="rounded-2xl border border-rule bg-white p-5 min-w-[220px]">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-ink-muted">
-            Scan inputs
-          </div>
-          <ul className="mt-4 space-y-3 text-sm">
-            <li className="flex items-start gap-3">
-              <Landmark className="w-4 h-4 text-ink-muted mt-0.5" strokeWidth={1.75} />
-              <div className="font-mono tabular text-xs text-ink break-all">
-                MBB · 5122 9844 3712
-              </div>
-            </li>
-            <li className="flex items-start gap-3">
-              <LinkIcon className="w-4 h-4 text-ink-muted mt-0.5" strokeWidth={1.75} />
-              <div className="font-mono text-xs text-ink break-all">
-                1 link scanned
-              </div>
-            </li>
-            <li className="flex items-start gap-3">
-              <MessageSquare
-                className="w-4 h-4 text-ink-muted mt-0.5"
-                strokeWidth={1.75}
-              />
-              <div className="font-mono text-xs text-ink break-all">
-                137 chat messages
-              </div>
-            </li>
-          </ul>
-        </aside>
+        <ScanInputsSidebar inputs={inputs} />
       </div>
     </section>
+  );
+}
+
+const ID_TYPE_LABEL: Record<string, string> = {
+  mykad: "MyKad",
+  bric: "BRIC",
+  police: "Police ID",
+  army: "Army ID",
+  unhcr: "UNHCR",
+  passport: "Passport",
+};
+
+function formatAccount(acc: string): string {
+  const digits = acc.replace(/\D/g, "");
+  return digits.replace(/(.{4})/g, "$1 ").trim();
+}
+
+function ScanInputsSidebar({ inputs }: { inputs: ReportType["inputs"] }) {
+  const items: { icon: typeof Landmark; text: string; mono?: boolean }[] = [];
+
+  if (inputs.bankAccount) {
+    items.push({
+      icon: Landmark,
+      text: `${inputs.bankAccount.bank} · ${formatAccount(inputs.bankAccount.account)}`,
+      mono: true,
+    });
+  }
+  if (inputs.idCheck) {
+    const label = ID_TYPE_LABEL[inputs.idCheck.idType] || inputs.idCheck.idType;
+    items.push({
+      icon: ShieldCheck,
+      text: `${label} · ${inputs.idCheck.idNo}`,
+      mono: true,
+    });
+  }
+  if (inputs.links && inputs.links.length > 0) {
+    items.push({
+      icon: LinkIcon,
+      text: inputs.links.length === 1 ? inputs.links[0] : `${inputs.links.length} links scanned`,
+    });
+  }
+  if (inputs.chat) {
+    const text =
+      inputs.chat.source === "telegram"
+        ? inputs.chat.label
+        : `${inputs.chat.label} · ${inputs.chat.messageCount} messages`;
+    items.push({ icon: MessageSquare, text, mono: true });
+  }
+  if (inputs.transaction) {
+    const t = inputs.transaction;
+    items.push({
+      icon: ArrowUpRight,
+      text: `RM ${t.amount.toFixed(2)} · ${t.transaction_type.replace("_", " ")}`,
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <aside className="rounded-2xl border border-rule bg-white p-5 min-w-[220px]">
+      <div className="text-[10px] uppercase tracking-[0.22em] text-ink-muted">
+        Scan inputs
+      </div>
+      <ul className="mt-4 space-y-3 text-sm">
+        {items.map((item, i) => (
+          <li key={i} className="flex items-start gap-3">
+            <item.icon className="w-4 h-4 text-ink-muted mt-0.5 shrink-0" strokeWidth={1.75} />
+            <div className={cn("text-xs text-ink break-all", item.mono ? "font-mono tabular" : "")}>
+              {item.text}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </aside>
   );
 }
 
@@ -382,28 +462,39 @@ function HowScoredLink() {
                 Scoring
               </div>
               <h3 className="font-display text-2xl text-ink mb-4">
-                Four sources, one score.
+                Four sources, combined like probabilities.
               </h3>
-              <ul className="text-sm text-ink-muted space-y-3">
+              <p className="text-sm text-ink-muted leading-relaxed mb-4">
+                Each source produces a fraud probability — the more confident
+                it is, the higher its score. We combine them so multiple
+                independent signals reinforce each other.
+              </p>
+              <ul className="text-sm text-ink-muted space-y-2">
                 <li>
-                  <span className="text-ink font-medium">Semak Mule hit →</span>{" "}
-                  automatic high.
+                  <span className="text-ink font-medium">Semak Mule match</span>{" "}
+                  · ~92% on its own.
                 </li>
                 <li>
-                  <span className="text-ink font-medium">NFP report →</span> +40
-                  points.
+                  <span className="text-ink font-medium">NFP tier 1</span> · 85%
+                  · tier 2 · 60%.
                 </li>
                 <li>
-                  <span className="text-ink font-medium">Link flags →</span> +20
-                  per flag (max +40).
+                  <span className="text-ink font-medium">Link scan</span> · uses
+                  the LLM scam confidence directly.
                 </li>
                 <li>
-                  <span className="text-ink font-medium">Chat model →</span> up
-                  to +40 based on probability.
+                  <span className="text-ink font-medium">Behavior</span> · uses
+                  the layer-3 risk score (0–100) directly.
                 </li>
               </ul>
+              <p className="text-xs text-ink-muted mt-4 leading-relaxed">
+                Combined as <span className="font-mono">1 − ∏(1 − p)</span> —
+                two weak signals can compound into a strong verdict; a single
+                strong signal alone is enough to flag.
+              </p>
               <div className="mt-5 text-xs text-ink-muted">
-                0–29 low · 30–59 medium · 60+ high.
+                0–29 low · 30–59 medium · 60+ high. Skipped sources don't move
+                the score.
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -458,7 +549,12 @@ function sourceIcon(s: SourceSignal["source"]) {
       return ShieldAlert;
     case "link_scrape":
       return LinkIcon;
+    case "behavior":
+      return Activity;
+    // Legacy alias — keeps older signals shaped as "chat_model" rendering.
     case "chat_model":
-      return MessageSquare;
+      return Activity;
+    default:
+      return Info;
   }
 }
