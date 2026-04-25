@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -8,7 +8,10 @@ import {
   Lock,
   CheckCircle2,
   Info,
+  QrCode,
+  Loader2,
 } from "lucide-react";
+import jsQR from "jsqr";
 import { detectInput, MALAYSIAN_BANKS, type DetectedKind } from "../lib/detect";
 import { cn } from "../lib/cn";
 import { AnimatePresence, motion } from "framer-motion";
@@ -76,6 +79,13 @@ export default function Check() {
   const [txType, setTxType] = useState<TransactionType>("duitnow_transfer");
   const [recipientName, setRecipientName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [qrState, setQrState] = useState<
+    | { kind: "idle" }
+    | { kind: "decoding" }
+    | { kind: "ok"; value: string }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+  const qrInputRef = useRef<HTMLInputElement | null>(null);
 
   const detected = useMemo(() => detectInput(smart), [smart]);
 
@@ -89,6 +99,38 @@ export default function Check() {
     (showBank && accountValid && account.length > 0) ||
     (showChat && tgHandle.trim().length > 2) ||
     (showId && idValid && idNo.trim().length > 0);
+
+  const onPickQr = () => {
+    qrInputRef.current?.click();
+  };
+
+  const onQrFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setQrState({ kind: "decoding" });
+    try {
+      const decoded = await decodeQrFromFile(file);
+      if (!decoded) {
+        setQrState({
+          kind: "error",
+          message:
+            "No QR code found in the image. Try a clearer crop or different photo.",
+        });
+        return;
+      }
+      console.log("[check] QR decoded →", decoded);
+      setSmart(decoded);
+      setQrState({ kind: "ok", value: decoded });
+    } catch (err) {
+      console.error("[check] QR decode failed:", err);
+      setQrState({
+        kind: "error",
+        message: "Couldn't read that image. Try a different file.",
+      });
+    }
+  };
 
   const onSubmit = async () => {
     if (!hasAnyInput || submitting) return;
@@ -186,10 +228,72 @@ export default function Check() {
             )}
           </AnimatePresence>
         </div>
-        <div className="flex items-center gap-2 mt-3 text-xs text-ink-muted">
-          <Lock className="w-3 h-3" strokeWidth={2} />
-          Ephemeral by design. We don't save what you paste.
+        <div className="flex items-center justify-between gap-3 mt-3 text-xs text-ink-muted">
+          <div className="flex items-center gap-2">
+            <Lock className="w-3 h-3" strokeWidth={2} />
+            Ephemeral by design. We don't save what you paste.
+          </div>
+          <button
+            type="button"
+            onClick={onPickQr}
+            disabled={qrState.kind === "decoding"}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 min-h-[32px] touch-manipulation transition-colors",
+              qrState.kind === "decoding"
+                ? "border-rule bg-surface text-ink-muted cursor-wait"
+                : "border-rule bg-white text-ink hover:border-blue hover:text-blue",
+            )}
+          >
+            {qrState.kind === "decoding" ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2.2} />
+            ) : (
+              <QrCode className="w-3.5 h-3.5" strokeWidth={2.2} />
+            )}
+            <span className="hidden sm:inline">
+              {qrState.kind === "decoding"
+                ? "Reading QR…"
+                : "Scan QR from image"}
+            </span>
+            <span className="sm:hidden">
+              {qrState.kind === "decoding" ? "Reading…" : "Scan QR"}
+            </span>
+          </button>
+          <input
+            ref={qrInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={onQrFile}
+          />
         </div>
+        <AnimatePresence>
+          {qrState.kind === "ok" && (
+            <motion.div
+              key="qr-ok"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-good/10 text-good px-2 py-1 text-[11px]"
+            >
+              <CheckCircle2 className="w-3 h-3" strokeWidth={2.2} />
+              QR decoded —{" "}
+              <span className="font-mono truncate max-w-[260px]">
+                {qrState.value}
+              </span>
+            </motion.div>
+          )}
+          {qrState.kind === "error" && (
+            <motion.div
+              key="qr-err"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-bad/10 text-bad px-2 py-1 text-[11px]"
+            >
+              {qrState.message}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <SupportedPlatforms />
       </section>
@@ -517,6 +621,39 @@ function SupportedPlatforms() {
       </AnimatePresence>
     </div>
   );
+}
+
+async function decodeQrFromFile(file: File): Promise<string | null> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Image failed to load"));
+      el.src = url;
+    });
+
+    // Cap the canvas size — jsQR is O(pixels), and phone photos can be 4000×3000.
+    const MAX = 1280;
+    const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, w, h);
+    const imageData = ctx.getImageData(0, 0, w, h);
+
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: "attemptBoth",
+    });
+    return code?.data?.trim() || null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function Disclosure({
