@@ -3,9 +3,15 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+# Load AWS / S3 / SageMaker config from the project-root .env (one level up
+# from this service). Without this, boto3 hangs walking the credential chain.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from app.models.request import CheckTransactionRequest, SimulateTransactionRequest
 from app.models.response import CheckTransactionResponse, UserProfileResponse
