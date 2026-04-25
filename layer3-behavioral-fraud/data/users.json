@@ -1,0 +1,22 @@
+{
+  "user_001": {
+    "user_id": "user_001",
+    "name": "Aisyah",
+    "persona": "office_worker_bangsar"
+  },
+  "user_002": {
+    "user_id": "user_002",
+    "name": "Ahmad",
+    "persona": "grab_driver"
+  },
+  "user_003": {
+    "user_id": "user_003",
+    "name": "Wei",
+    "persona": "student_ioi"
+  },
+  "user_004": {
+    "user_id": "user_004",
+    "name": "Mak Timah",
+    "persona": "retiree_kajang"
+  }
+}
