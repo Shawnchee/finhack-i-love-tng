@@ -12,7 +12,13 @@ import { detectInput, MALAYSIAN_BANKS, type DetectedKind } from "../lib/detect";
 import { cn } from "../lib/cn";
 import { AnimatePresence, motion } from "framer-motion";
 import Magnet from "../components/Magnet";
-import type { IdType } from "../lib/api";
+import type { IdType, TransactionType } from "../lib/api";
+
+const TX_TYPES: { code: TransactionType; name: string }[] = [
+  { code: "duitnow_transfer", name: "DuitNow transfer" },
+  { code: "qr_payment", name: "QR payment" },
+  { code: "bill_payment", name: "Bill payment" },
+];
 
 const KIND_LABEL: Record<DetectedKind, string> = {
   bank: "Bank account",
@@ -44,6 +50,11 @@ export interface CheckSubmitPayload {
   idType: IdType | null;
   idNo: string | null;
   tgHandle: string | null;
+  /** Optional layer3 transaction overrides; null falls back to defaults in Checking. */
+  userId: string | null;
+  amount: number | null;
+  transactionType: TransactionType | null;
+  recipientName: string | null;
   detectedKind: DetectedKind;
 }
 
@@ -53,11 +64,16 @@ export default function Check() {
   const [showBank, setShowBank] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showId, setShowId] = useState(false);
+  const [showTx, setShowTx] = useState(false);
   const [bank, setBank] = useState("MBB");
   const [account, setAccount] = useState("");
   const [tgHandle, setTgHandle] = useState("");
   const [idType, setIdType] = useState<IdType>("mykad");
   const [idNo, setIdNo] = useState("");
+  const [userId, setUserId] = useState("user_001");
+  const [amount, setAmount] = useState("100");
+  const [txType, setTxType] = useState<TransactionType>("duitnow_transfer");
+  const [recipientName, setRecipientName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const detected = useMemo(() => detectInput(smart), [smart]);
@@ -89,6 +105,9 @@ export default function Check() {
 
       const cleanedAccount = account.replace(/\s|-/g, "");
 
+      const parsedAmount = Number(amount);
+      const amountValid = Number.isFinite(parsedAmount) && parsedAmount > 0;
+
       const payload: CheckSubmitPayload = {
         smart,
         bank: showBank && cleanedAccount.length > 0 ? bank : null,
@@ -97,6 +116,13 @@ export default function Check() {
         idNo: showId && idNo.trim().length > 0 ? idNo.trim() : null,
         tgHandle:
           showChat && tgHandle.trim().length > 0 ? tgHandle.trim() : null,
+        userId: showTx && userId.trim().length > 0 ? userId.trim() : null,
+        amount: showTx && amountValid ? parsedAmount : null,
+        transactionType: showTx ? txType : null,
+        recipientName:
+          showTx && recipientName.trim().length > 0
+            ? recipientName.trim()
+            : null,
         detectedKind: detected,
       };
 
@@ -272,6 +298,78 @@ export default function Check() {
             Chat-behaviour scoring is in development — we'll log the handle for
             now and flag it on the report.
           </p>
+        </Disclosure>
+
+        <Disclosure
+          open={showTx}
+          onToggle={() => setShowTx((v) => !v)}
+          label="Add transaction details"
+          hint="Score this against a TNG user's behavioral baseline."
+        >
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_140px] gap-3">
+              <label className="block">
+                <span className="text-[11px] uppercase tracking-wider text-ink-muted">
+                  TNG user ID
+                </span>
+                <input
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  placeholder="user_001"
+                  className="mt-1 w-full rounded-xl border border-rule focus:border-blue bg-white px-4 py-3 text-sm font-mono tabular text-ink outline-none"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[11px] uppercase tracking-wider text-ink-muted">
+                  Amount (RM)
+                </span>
+                <input
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) =>
+                    setAmount(e.target.value.replace(/[^\d.]/g, ""))
+                  }
+                  placeholder="100"
+                  className="mt-1 w-full rounded-xl border border-rule focus:border-blue bg-white px-4 py-3 text-sm font-mono tabular text-ink outline-none"
+                />
+              </label>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-3">
+              <label className="relative block">
+                <span className="text-[11px] uppercase tracking-wider text-ink-muted">
+                  Type
+                </span>
+                <select
+                  value={txType}
+                  onChange={(e) => setTxType(e.target.value as TransactionType)}
+                  className="mt-1 w-full appearance-none rounded-xl border border-rule bg-white px-4 py-3 pr-9 text-sm font-medium text-ink outline-none focus:border-blue"
+                >
+                  {TX_TYPES.map((t) => (
+                    <option key={t.code} value={t.code}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 absolute right-3 bottom-3.5 text-ink-muted pointer-events-none" />
+              </label>
+              <label className="block">
+                <span className="text-[11px] uppercase tracking-wider text-ink-muted">
+                  Recipient name (optional)
+                </span>
+                <input
+                  value={recipientName}
+                  onChange={(e) => setRecipientName(e.target.value)}
+                  placeholder="Unknown"
+                  className="mt-1 w-full rounded-xl border border-rule focus:border-blue bg-white px-4 py-3 text-sm text-ink outline-none"
+                />
+              </label>
+            </div>
+            <p className="text-xs text-ink-muted">
+              Sent to the layer-3 behavioral scorer with the bank account
+              above. Without these we use sensible defaults
+              (user_001, RM100, DuitNow).
+            </p>
+          </div>
         </Disclosure>
       </section>
 

@@ -294,11 +294,11 @@ async function runLiveChecks({
   const willRunBehavior = !!input.account; // build a default tx when account exists
   const transactionPayload: CheckTransactionRequest | null = willRunBehavior
     ? {
-        user_id: "user_001",
+        user_id: input.userId ?? "user_001",
         recipient_account: input.account!,
-        recipient_name: "Unknown",
-        amount: 100,
-        transaction_type: "duitnow_transfer",
+        recipient_name: input.recipientName ?? "Unknown",
+        amount: input.amount ?? 100,
+        transaction_type: input.transactionType ?? "duitnow_transfer",
         timestamp: new Date().toISOString(),
       }
     : null;

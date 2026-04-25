@@ -6,7 +6,6 @@ import Check from "./pages/Check";
 import Checking from "./pages/Checking";
 import Report from "./pages/Report";
 import About from "./pages/About";
-import TransactionCheck from "./pages/TransactionCheck";
 
 function Shell() {
   const { pathname } = useLocation();
@@ -21,7 +20,6 @@ function Shell() {
         <Route path="/check" element={<Check />} />
         <Route path="/checking" element={<Checking />} />
         <Route path="/report/:id" element={<Report />} />
-        <Route path="/transaction-check" element={<TransactionCheck />} />
         <Route path="/about" element={<About />} />
         <Route path="*" element={<Landing />} />
       </Routes>
