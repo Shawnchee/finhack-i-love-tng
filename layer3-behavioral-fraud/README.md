@@ -4,6 +4,8 @@ TNG FinHack 2026. Per-user behavioral anomaly detection.
 
 Given a candidate transaction, returns a risk score (0-100), a decision (`ALLOW | NOTIFY | CHALLENGE | BLOCK`), and explainable reason codes. Hybrid pipeline: deterministic rules + per-user Isolation Forest.
 
+> One of three backend services in the [Semak](../README.md) project. Runs alongside [`mule_check_api`](../mule_check_api/) (NFP + SemakMule registry checks) and [`fraud_detect_api`](../fraud_detect_api/) (URL scraping + scam-keyword matching). The frontend at [`/transaction-check`](../frontend/src/pages/TransactionCheck.tsx) is the primary consumer of this service.
+
 ---
 
 ## How scoring works
@@ -233,7 +235,7 @@ tests/        test_scenarios.py (stub)
 
 ---
 
-## Personas (shared across all 3 layers)
+## Personas (shared across all 3 backend services)
 
 | user_id   | Name      | Role                          | Demo scenario                        | Decision    | Risk |
 |-----------|-----------|-------------------------------|--------------------------------------|-------------|------|
