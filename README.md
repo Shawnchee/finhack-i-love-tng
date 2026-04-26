@@ -39,6 +39,10 @@ The final score is a noisy-OR combination of signal probabilities: one strong hi
 - GitHub Actions builds Docker images on every push to `main`, pushes to Amazon ECR, and redeploys to ECS
 - The behavioral ML service loads per-user Isolation Forest models lazily from **AWS S3** via a **SageMaker Multi-Model Endpoint**
 
+### Multi-Cloud Architecture
+
+![Multi-Cloud Architecture](docs/image/multi-cloud-architecture.png)
+
 ---
 
 ## API Endpoints
