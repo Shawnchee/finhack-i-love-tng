@@ -13,6 +13,13 @@ export interface ReviewRecord {
 const KEY = "semak_dashboard_v1";
 const MAX = 100;
 
+// crypto.randomUUID() requires a secure context (HTTPS) in Firefox/Safari.
+// Fall back to a timestamp+random id when unavailable (e.g. plain HTTP on prod ALB).
+function genId(): string {
+  try { return crypto.randomUUID(); } catch { /* fall through */ }
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
 export function loadRecords(): ReviewRecord[] {
   try {
     const raw = localStorage.getItem(KEY);
@@ -23,7 +30,9 @@ export function loadRecords(): ReviewRecord[] {
 }
 
 function persist(records: ReviewRecord[]): void {
-  localStorage.setItem(KEY, JSON.stringify(records.slice(0, MAX)));
+  try {
+    localStorage.setItem(KEY, JSON.stringify(records.slice(0, MAX)));
+  } catch { /* ignore quota / permission errors (e.g. Safari private mode) */ }
 }
 
 export function appendRecord(report: Report): void {
@@ -31,7 +40,7 @@ export function appendRecord(report: Report): void {
   // Deduplicate by report.id so hot-reload doesn't double-insert.
   if (records.some((r) => r.report.id === report.id)) return;
   const entry: ReviewRecord = {
-    id: crypto.randomUUID(),
+    id: genId(),
     report,
     status: "pending",
     note: "",
