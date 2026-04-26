@@ -30,18 +30,12 @@ The final score is a noisy-OR combination of signal probabilities: one strong hi
 
 ## Architecture
 
-![Architecture diagram](docs/architecture.png)
-
-> **To update this image:** add your diagram as `docs/architecture.png` in the repo root and it will render here automatically.
+![Multi-Cloud Architecture](docs/image/multi-cloud-architecture.png)
 
 **Deployment overview:**
 - Frontend and backend each run as separate **AWS ECS Fargate** tasks behind an **Application Load Balancer**
 - GitHub Actions builds Docker images on every push to `main`, pushes to Amazon ECR, and redeploys to ECS
 - The behavioral ML service loads per-user Isolation Forest models lazily from **AWS S3** via a **SageMaker Multi-Model Endpoint**
-
-### Multi-Cloud Architecture
-
-![Multi-Cloud Architecture](docs/image/multi-cloud-architecture.png)
 
 ---
 
