@@ -1,208 +1,268 @@
 # ScamBusters — TNG FinHack 2026
 
-A consumer-facing pre-transaction scam check for Malaysians. Paste a bank account, a link, or a chat export — get a verdict (`LOW` / `MEDIUM` / `HIGH RISK`) before you send the money.
+> **Pre-transaction scam detection for Malaysian consumers.**
+> Paste a bank account, a suspicious link, or a chat export — get a risk verdict before you send the money.
 
-UX in one line: **a calm expert friend replying fast — one input, honest uncertainty, zero dashboard.**
+Live: `http://scambuster-alb-399113752.ap-southeast-1.elb.amazonaws.com` (port 80)
+
+---
+
+## The Problem
+
+Malaysia's fraud registries and rule-based blocks use the same thresholds for everyone. A transfer that's normal for a business owner looks like fraud for a retiree — and a subtle scam that only looks suspicious in the context of *one person's* behaviour slips through both.
+
+---
+
+## Solution Overview
+
+ScamBusters runs four independent fraud signals in parallel and combines them into a single risk verdict:
+
+| Layer | Signal | How |
+|---|---|---|
+| **NFP** | National Fraud Portal | PayNet mule registry — checks the account against filed fraud reports |
+| **Semak Mule** | BNM Semak Mule | Bank Negara Malaysia's official mule account database |
+| **Link Scan** | URL scraper + LLM | Playwright scrape → multilingual keyword match → LLM classification across 4 dimensions |
+| **Behavioral (Layer 3)** | Per-user anomaly detection | Rules engine + per-user Isolation Forest ML model hosted on AWS SageMaker |
+
+The final score is a **noisy-OR combination** of signal probabilities, so a single strong hit (e.g. Semak Mule match) drives the verdict to High Risk on its own, and multiple weak hits compound.
 
 ---
 
 ## Architecture
 
-Three independent FastAPI services + one React frontend. Each service is owned by a different layer of the scam-detection pipeline and can be developed in isolation.
-
 ```
-                       ┌─────────────────────────┐
-                       │  frontend (Vite + React)│
-                       │  http://localhost:5173  │
-                       └────────────┬────────────┘
-                                    │
-          ┌─────────────────────────┼─────────────────────────┐
-          │                         │                         │
-          ▼                         ▼                         ▼
-┌──────────────────┐   ┌────────────────────────┐   ┌──────────────────┐
-│ mule_check_api   │   │ layer3-behavioral-     │   │ fraud_detect_api │
-│   :8000          │   │ fraud  :8083           │   │   :8082          │
-│                  │   │                        │   │                  │
-│ NFP + SemakMule  │   │ per-user transaction   │   │ URL scrape +     │
-│ registry mocks   │   │ risk scoring (rules    │   │ scam-keyword     │
-│                  │   │ + Isolation Forest)    │   │ matcher          │
-└──────────────────┘   └────────────────────────┘   └──────────────────┘
+┌──────────────────────────────────────────────┐
+│             Frontend (React 19 + Vite)        │
+│        ECS Fargate · nginx:alpine · port 80   │
+└──────────────────────┬───────────────────────┘
+                       │  HTTP
+                       ▼
+┌──────────────────────────────────────────────┐
+│         Consolidated Backend (FastAPI)        │
+│        ECS Fargate · Python 3.12 · port 8000  │
+│                                               │
+│  /api/v1/nfp/           NFP registry check    │
+│  /api/v1/semakmule/     BNM Semak Mule check  │
+│  /api/v1/fraud-scan/    URL scrape + LLM      │
+│  /api/v1/behavioral/    Behavioral fraud      │
+│  /api/health            Health probe          │
+└───────┬───────────────────┬──────────────────┘
+        │                   │
+        ▼                   ▼
+┌──────────────┐   ┌──────────────────────────┐
+│  LLM API     │   │  AWS SageMaker MME        │
+│  (OpenAI-    │   │  Isolation Forest models  │
+│  compatible) │   │  one artifact per user    │
+└──────────────┘   └──────────┬───────────────┘
+                              │
+                              ▼
+                   ┌──────────────────────────┐
+                   │  AWS S3                   │
+                   │  data/users.json          │
+                   │  data/transactions.json   │
+                   │  models/user_XXX.tar.gz   │
+                   └──────────────────────────┘
 ```
 
-| Service | Port | Stack | Purpose |
-|---|---|---|---|
-| [`mule_check_api`](mule_check_api/) | 8000 | FastAPI + SQLAlchemy | Mocks PayNet **NFP** and **SemakMule** mule-account registries — wire-format compatible with the production APIs. |
-| [`layer3-behavioral-fraud`](layer3-behavioral-fraud/) | 8083 | FastAPI + scikit-learn | Per-user behavioral anomaly detection. Scores a candidate transaction `0–100` and returns `ALLOW / NOTIFY / CHALLENGE / BLOCK` with explainable reason codes. |
-| [`fraud_detect_api`](fraud_detect_api/) | 8082 | FastAPI + Playwright + OpenAI-compatible LLM | Scrapes a URL (Reddit, Lowyat, Cari, Mudah, generic sites), matches against a multilingual scam-keyword corpus (EN / BM / Manglish / Chinese), then runs LLM classification across four dimensions: regulatory (SC Malaysia capital-market scope), localisation (Malaysian targeting), scam type, and scam indicators. Returns a final `SCAM` / `NOT_SCAM` verdict with an evidence summary. |
-| [`frontend`](frontend/) | 5173 | React 19 + Vite + Tailwind | Single-page app: `/`, `/check`, `/checking`, `/report/:id`, `/about`. |
+Both services deploy to **AWS ECS Fargate** behind an **Application Load Balancer**. GitHub Actions builds, pushes to ECR, and deploys on every push to `main`.
 
 ---
 
-## Quickstart
+## Layer 3 — Behavioral Fraud Detection
 
-**Prereqs:** macOS or Linux, Python 3.11+, Node 20+, [Homebrew](https://brew.sh/) (for Overmind).
+*Owned by [@Ilham Firdaus](https://github.com/IlhamFirdaus)*
 
-```bash
-# 1. Install everything (overmind + python deps + Playwright Chromium + npm deps)
-make install
+The behavioral service is what makes ScamBusters different from static registry checks. Instead of applying the same RM5,000 threshold to every user, it learns each person's spending pattern and flags deviations from *their own* baseline.
 
-# 2. Seed mule_check_api's SQLite DB with known mules (one-time, idempotent)
-.venv/bin/python -m mule_check_api.dummy_data.seed
+### How it works
 
-# 3. Run all 4 processes in one terminal — Ctrl+C kills them all cleanly
-overmind start
+**Step 1 — Rules engine (8 rule checks)**
+
+| Rule | Severity | Trigger |
+|---|---|---|
+| `UNUSUAL_AMOUNT` | HIGH | Amount > 5× user's 30-day rolling average |
+| `EXCEEDS_HISTORICAL_MAX` | HIGH | Amount > 1.5× user's all-time maximum |
+| `NEW_RECIPIENT_LARGE_AMOUNT` | HIGH | First-time recipient AND amount > RM1,000 |
+| `DORMANT_REACTIVATION` | HIGH | No activity in 30 days, now a large transfer |
+| `HIGH_VELOCITY` | MEDIUM | >3 transactions in 10 minutes |
+| `NEW_RECIPIENT` | MEDIUM | Recipient account never seen before |
+| `UNUSUAL_TIME` | LOW | Hour outside user's top-80% active hours |
+| `ROUND_AMOUNT` | LOW | Exact RM500/1000/2000/5000/10000 |
+
+**Step 2 — ML model (per-user Isolation Forest)**
+
+Each user has their own Isolation Forest trained on 12 features extracted from their transaction history:
+
+`amount_z_score`, `log_amount`, `hour_sin`, `hour_cos`, `day_of_week`, `is_weekend`, `is_late_night`, `is_new_recipient`, `days_since_last_txn`, `velocity_10min`, `amount_pct_of_max`, `amount_pct_of_avg`
+
+Model artifacts (`.tar.gz`) are stored in S3 and loaded lazily by a **SageMaker Multi-Model Endpoint** — one endpoint serves every user, models are loaded on first call and cached in the endpoint's memory.
+
+**Step 3 — Score fusion**
+
+```
+rule_based_score  = sum(severity_points)   # HIGH=25 / MEDIUM=15 / LOW=7
+ml_contribution   = scale(anomaly_score)   # maps [-0.5, 0] → [40, 0] pts
+final_risk_score  = min(100, rule_based_score + ml_contribution)
 ```
 
-That's it. Open <http://localhost:5173>.
+Rules carry up to 60 points; ML contributes up to 40 points.
 
-If a port hangs after a crash:
+**Decision thresholds**
 
-```bash
-make kill   # frees 8000 / 8082 / 8083 / 5173
+| Score | Decision | Action |
+|---|---|---|
+| 0 – 39 | `ALLOW` | Silent pass |
+| 40 – 69 | `NOTIFY` | Post-transaction notice |
+| 70 – 100 | `CHALLENGE` | Re-authentication modal (transaction still goes through on success) |
+
+### API endpoints
+
 ```
-
-### What `overmind start` does
-
-[Overmind](https://github.com/DarthSim/overmind) is a tmux-backed process manager. It reads [`Procfile`](Procfile) and runs every process in its own tmux pane:
-
-```
-mule:     .venv/bin/python -m uvicorn mule_check_api.main:app --port 8000 --reload
-layer3:   cd layer3-behavioral-fraud && ../.venv/bin/python -m uvicorn app.main:app --port 8083 --reload
-scrape:   cd fraud_detect_api && ../.venv/bin/python -m uvicorn app.main:app --port 8082 --reload
-frontend: cd frontend && npm run dev
-```
-
-Each backend invokes Python via the project-root `.venv` so PATH and shell-aliased `python3` confusion stays out of the picture.
-
-Attach to a single process to debug it:
-
-```bash
-overmind connect layer3       # detach with Ctrl+b d
-```
-
-### Running services individually
-
-Each service is independent — you can run any subset.
-
-```bash
-# Activate the project venv first (one-off per shell)
-source .venv/bin/activate
-
-# mule_check_api — runs from project root so the package is importable
-uvicorn mule_check_api.main:app --port 8000 --reload
-
-# layer3-behavioral-fraud
-cd layer3-behavioral-fraud && uvicorn app.main:app --port 8083 --reload
-
-# fraud_detect_api
-cd fraud_detect_api && uvicorn app.main:app --port 8082 --reload
-
-# frontend (no venv needed)
-cd frontend && npm run dev
-```
-
----
-
-## Environment
-
-See [`.env.example`](.env.example) for the full list. Two services have configurable env:
-
-### `fraud_detect_api` — LLM classifier
-
-The `/api/scan` endpoint needs an OpenAI-compatible LLM endpoint to produce the `verdict` / `regulatory` / `localisation` / `scam` classification. Without these env vars, scraping still works but the classification fields come back `null`.
-
-```bash
-LLM_API_KEY=...
-LLM_BASE_URL=...                  # OpenAI-compatible base URL
-LLM_MODEL=ilmu-mini-v3            # default
-LLM_REASONING_EFFORT=              # optional: "low" or "high"
-```
-
-Drop these into a `.env` file at the repo root (loaded via `python-dotenv` from `fraud_detect_api/app/main.py`).
-
-### Frontend Vite env
-
-Localhost defaults are baked in — no `.env` needed for local dev.
-
-```bash
-VITE_MULE_API_URL=http://localhost:8000     # mule_check_api
-VITE_LAYER3_API_URL=http://localhost:8083   # layer3-behavioral-fraud
-VITE_SCRAPE_API_URL=http://localhost:8082   # fraud_detect_api
+POST /api/v1/behavioral/check-transaction     score a candidate transaction
+GET  /api/v1/behavioral/user-profile/{id}     view a user's spending profile
+POST /api/v1/behavioral/simulate-transaction  add a transaction and rescore
 ```
 
 ---
 
-## Repo layout
+## Demo Personas (Layer 3)
+
+Pre-seeded in the live deployment. Use these `user_id` values to hit the behavioral API or trigger demo flows in the frontend.
+
+| `user_id` | Name | Scenario | Decision | Score |
+|---|---|---|---|---|
+| `user_001` | Aisyah | RM4,800 to new account at 23:47 — love-scam pattern | `CHALLENGE` | ~94 |
+| `user_002` | Ahmad | 5× RM2,000 within 10 min — phone-theft velocity | `CHALLENGE` | ~100 |
+| `user_003` | Wei | RM18 QR bubble-tea — within normal range | `ALLOW` | ~15 |
+| `user_004` | Mak Timah | RM8,000 to new account at 20:00 — PDRM impersonation | `CHALLENGE` | ~99 |
+
+---
+
+## Repo Layout
 
 ```
 .
-├── Makefile                       # install / kill helpers
-├── Procfile                       # overmind process definitions
-├── PRD.md                         # product requirements
-├── PAGES.md                       # frontend page-level design spec
+├── backend/                       # Consolidated FastAPI (port 8000)
+│   ├── api/v1/
+│   │   ├── behavioral.py          # Layer 3 behavioral fraud endpoints
+│   │   ├── fraud_scan.py          # URL scraper + LLM scan endpoints
+│   │   ├── nfp.py                 # NFP registry endpoints
+│   │   └── semakmule.py           # BNM Semak Mule endpoints
+│   ├── services/
+│   │   ├── behavioral/            # rules_engine, ml_model, risk_scorer,
+│   │   │                          #   feature_engineering, sagemaker_client
+│   │   └── fraud_scan/            # scraper, classifier, keywords, prompts
+│   ├── models/                    # Pydantic request/response schemas
+│   ├── db/                        # SQLAlchemy schema + seed (mule data)
+│   └── main.py                    # FastAPI app + lifespan
 │
-├── mule_check_api/                # NFP + SemakMule mock (port 8000)
-│   ├── HANDBOOK.md                # API reference + seed data
-│   ├── api/v1/                    # nfp.py, semakmule.py
-│   ├── services/                  # nfp_service.py, semakmule_service.py
-│   ├── models/                    # pydantic request/response
-│   ├── db/                        # SQLAlchemy schema + session
-│   ├── core/                      # config, logging
-│   ├── dummy_data/                # seed.py — `python -m mule_check_api.dummy_data.seed`
-│   └── main.py
+├── frontend/                      # React 19 + Vite + Tailwind (port 5173 dev)
+│   └── src/
+│       ├── pages/                 # Landing, Check, Checking, Report,
+│       │                          #   Dashboard, About, DemoTransfer, DemoLinks
+│       ├── components/            # TopNav, SourceMarquee, FloatingReportCard…
+│       └── lib/
+│           ├── api.ts             # Typed clients for all backend services
+│           ├── mockReport.ts      # Report builder + demo fixtures
+│           └── dashboardStore.ts  # LocalStorage-backed analyst dashboard
 │
-├── layer3-behavioral-fraud/       # transaction risk scorer (port 8083)
-│   ├── README.md                  # full API + scoring details
-│   ├── app/
-│   │   ├── main.py                # 4 endpoints + startup hook
-│   │   ├── services/              # rules_engine, ml_model, risk_scorer, ...
-│   │   └── models/                # pydantic request/response
-│   ├── data/                      # users.json, transactions.json (generated)
-│   ├── scripts/generate_synthetic_data.py
-│   └── tests/test_scenarios.py
+├── ci/
+│   ├── docker/
+│   │   ├── backend/Dockerfile     # python:3.12-slim + Playwright
+│   │   └── frontend/
+│   │       ├── Dockerfile         # node:22-alpine build → nginx:alpine serve
+│   │       └── nginx.conf         # SPA fallback (try_files → index.html)
+│   └── task-definitions/          # ECS task definitions (backend + frontend)
 │
-├── fraud_detect_api/              # URL scraper + keyword matcher (port 8082)
-│   └── app/
-│       ├── main.py                # FastAPI entry + /api/scrape
-│       ├── scraper.py             # site-specific routing
-│       ├── cari_scraper.py
-│       └── keywords.py
+├── .github/workflows/deploy.yml   # Build → ECR push → ECS deploy (on push to main)
 │
-└── frontend/                      # React 19 + Vite (port 5173)
-    └── src/
-        ├── pages/                 # Landing, Check, Checking, Report, About
-        ├── components/            # BlurText, CountUp, Magnet, TiltedCard, ...
-        └── lib/
-            ├── api.ts             # typed clients for all 3 backends
-            ├── detect.ts          # input-type sniffing
-            └── mockReport.ts      # demo fixtures
+└── archive/                       # Original per-service folders (reference only)
+    ├── layer3-behavioral-fraud/
+    ├── mule_check_api/
+    └── fraud_detect_api/
 ```
 
 ---
 
-## Demo personas (Layer 3)
+## Running Locally
 
-| `user_id` | Name | Demo scenario | Decision | Risk |
-|---|---|---|---|---|
-| `user_001` | Aisyah | RM4800 to new account @ 23:47 (love-scam) | `BLOCK` | 99 |
-| `user_002` | Ahmad | 5× RM2000 within 10 min (phone theft) | `BLOCK` | 100 |
-| `user_003` | Wei | RM18 QR bubble tea (normal) | `ALLOW` | 15 |
-| `user_003` | Wei | RM150 to new account @ 03:00 (subtle) | `NOTIFY` | 30 |
-| `user_004` | Mak Timah | RM8000 to new account @ 20:00 (PDRM scam) | `BLOCK` | 99 |
+**Prerequisites:** Python 3.11+, Node 20+
 
-Locked in by [`layer3-behavioral-fraud/tests/test_scenarios.py`](layer3-behavioral-fraud/tests/test_scenarios.py). Run `pytest` from that directory to verify.
+```bash
+# 1. Install Python deps (from repo root)
+pip install -e backend/
+
+# 2. Install Playwright browser
+playwright install chromium --with-deps
+
+# 3. Seed the mule database (one-time)
+python -m backend.db.seed
+
+# 4. Copy env and fill in keys
+cp .env.example .env
+
+# 5. Start the backend
+uvicorn backend.main:app --port 8000 --reload
+
+# 6. Start the frontend (separate terminal)
+cd frontend && npm install && npm run dev
+```
+
+Open <http://localhost:5173>. The frontend auto-proxies to `http://localhost:8000`.
 
 ---
 
-## Further reading
+## Environment Variables
 
-- [`PRD.md`](PRD.md) — product requirements, scoring rationale, source weighting.
-- [`PAGES.md`](PAGES.md) — page-by-page design + interaction spec for the frontend.
-- [`mule_check_api/HANDBOOK.md`](mule_check_api/HANDBOOK.md) — full NFP + SemakMule API reference with seed records.
-- [`layer3-behavioral-fraud/README.md`](layer3-behavioral-fraud/README.md) — rules, ML pipeline, reason codes, response shapes.
+```bash
+# ── LLM classifier (fraud_scan) ───────────────────────────────────────────────
+LLM_API_KEY=           # OpenAI-compatible API key
+LLM_BASE_URL=          # Base URL of the LLM API
+LLM_MODEL=ilmu-mini-v3
+LLM_REASONING_EFFORT=  # optional: "low" | "high"
+
+# ── Layer 3 behavioral fraud (AWS) ────────────────────────────────────────────
+AWS_REGION=ap-southeast-1
+S3_DATA_BUCKET=tngdfinhack-ml-model-store        # users.json + transactions.json
+S3_MODEL_BUCKET=tngdfinhack-ml-model-store       # Isolation Forest .tar.gz artifacts
+SAGEMAKER_ENDPOINT_NAME=layer3-isolation-forest-mme
+SAGEMAKER_ROLE_ARN=arn:aws:iam::<account>:role/<role>
+
+# ── Frontend (Vite build arg — optional, localhost defaults are baked in) ─────
+VITE_API_URL=http://localhost:8000
+```
+
+---
+
+## CI / CD
+
+Every push to `main` triggers the GitHub Actions pipeline:
+
+1. **Path filter** — only builds the service(s) whose files changed
+2. **Docker build** — multi-stage build, pushed to Amazon ECR with `latest` + `<sha>` tags
+3. **ECS deploy** — renders task definition with new image SHA, deploys to Fargate, waits for stability
+
+Backend image: `python:3.12-slim` + Playwright Chromium  
+Frontend image: `node:22-alpine` (build) → `nginx:alpine` (serve)
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, Framer Motion |
+| Backend | FastAPI, Python 3.12, Pydantic v2, SQLAlchemy |
+| Behavioral ML | scikit-learn Isolation Forest, NumPy, joblib |
+| ML Serving | AWS SageMaker Multi-Model Endpoint |
+| Data Store | AWS S3 |
+| Scraping | Playwright (Chromium), Trafilatura, BeautifulSoup4 |
+| LLM | OpenAI-compatible API (ilmu-mini-v3) |
+| Infrastructure | AWS ECS Fargate, ECR, Application Load Balancer |
+| CI / CD | GitHub Actions |
 
 ---
 
 ## Disclaimer
 
-Hackathon prototype for TNG FinHack 2026. Not affiliated with Bank Negara Malaysia, PDRM, PayNet, or Touch 'n Go. The mock NFP / SemakMule responses are wire-format compatible with the real services but contain no real customer data.
+Hackathon prototype for TNG FinHack 2026. Not affiliated with Bank Negara Malaysia, PDRM, PayNet, or Touch 'n Go. Mock NFP and BNM Semak Mule responses are wire-format compatible with the real services but contain no real customer data.
