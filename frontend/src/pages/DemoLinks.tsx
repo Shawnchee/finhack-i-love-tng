@@ -19,15 +19,14 @@ interface Message {
 
 const messages: Message[] = [
   {
-    sender: "💎 VIP Signals Group",
-    avatar: "TG",
-    avatarBg: "from-sky-500 to-blue-700",
-    time: "09:42",
-    badge: "INVITE",
-    body: "Welcome to our exclusive Telegram channel! Daily profit signals, payouts proof inside. Join before slots close 👇",
+    sender: "Thomas",
+    avatar: "T",
+    avatarBg: "from-emerald-500 to-green-700",
+    time: "22:47",
+    body: "BANTUAN RM2,500 DIBAYAR 2 KALI TAHUN INI: SEMAK SENARAI PENERIMA YANG TELAH DIKREDITKAN\n\nSenarai Penuh Penerima 👇\n\nSHARE INFO ini kepada rakan-rakan dan saudara mara untuk manfaat semua\n\n#kitabantukita",
     link: {
-      url: "https://t.me/bsoxhdn/5371",
-      preview: "t.me/bsoxhdn · Private signals channel · Post #5371",
+      url: "https://t.me/PET9818",
+      preview: "t.me/PET9818 · Senarai Penuh Penerima Bantuan",
     },
   },
   {
