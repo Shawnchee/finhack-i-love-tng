@@ -21,7 +21,7 @@ export default function About() {
 
       <section className="mt-12 space-y-5 text-ink leading-relaxed">
         <p>
-          Semak is a hackathon prototype. It takes any combination of a bank
+          ScamBusters is a hackathon prototype. It takes any combination of a bank
           account, a suspicious link, or a chat transcript, and cross-checks
           them against the sources that already exist to protect Malaysian
           consumers from scams.

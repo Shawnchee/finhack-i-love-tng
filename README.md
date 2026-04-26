@@ -1,4 +1,4 @@
-# Semak — TNG FinHack 2026
+# ScamBusters — TNG FinHack 2026
 
 A consumer-facing pre-transaction scam check for Malaysians. Paste a bank account, a link, or a chat export — get a verdict (`LOW` / `MEDIUM` / `HIGH RISK`) before you send the money.
 

@@ -77,7 +77,7 @@ export default function SourceMarquee() {
         {loop.map((s, i) => (
           <div key={`rev-${s.tag}-${i}`} className="flex items-center gap-8">
             <span className="font-mono text-xs uppercase tracking-[0.22em] text-ink-muted">
-              Checked by Semak
+              Checked by ScamBusters
             </span>
             <span className="text-ink-muted">·</span>
             <span className="font-display italic text-xl md:text-2xl text-ink-muted">

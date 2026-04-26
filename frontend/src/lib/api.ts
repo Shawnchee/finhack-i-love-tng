@@ -1,4 +1,4 @@
-// Typed clients for the three backend services that power Semak.
+// Typed clients for the three backend services that power ScamBusters.
 //
 // - mule_check_api          (camelCase wire format)        -> NFP + Semak Mule
 // - layer3-behavioral-fraud (snake_case wire format)       -> transaction risk

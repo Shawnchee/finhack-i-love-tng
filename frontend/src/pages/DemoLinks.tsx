@@ -1,5 +1,5 @@
 // Mock chat-style page with pre-curated scam messages. Click any link → the
-// Semak extension's link-guard intercepts it via the global click handler
+// ScamBusters extension's link-guard intercepts it via the global click handler
 // (no integration code lives here; this page is just dressing).
 //
 // HOW TO TUNE FOR YOUR PITCH:
@@ -81,7 +81,7 @@ export default function DemoLinks() {
           <strong className="font-semibold text-slate-300">
             Demo notice.
           </strong>{" "}
-          This page imitates a Telegram-style group chat for the Semak extension
+          This page imitates a Telegram-style group chat for the ScamBusters extension
           demo. Each message contains a link with a different scam pattern —
           click any one and the extension intercepts before navigation. No real
           messages, no real senders, no money moves.

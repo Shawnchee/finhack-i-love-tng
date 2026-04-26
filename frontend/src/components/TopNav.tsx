@@ -18,11 +18,8 @@ export default function TopNav() {
           to="/"
           className="group flex items-baseline gap-2 touch-manipulation py-2 -my-2"
         >
-          <span className="text-[10px] tracking-[0.22em] text-ink-muted uppercase">
-            Semak
-          </span>
           <span className="font-display text-[22px] leading-none text-ink">
-            fraud.
+            ScamBusters
           </span>
           <span className="ml-1 inline-block h-2 w-2 rounded-full bg-yellow" />
         </Link>

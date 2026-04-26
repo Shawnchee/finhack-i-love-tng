@@ -55,10 +55,9 @@ class SimulateTransactionRequest(BaseModel):
 # ── API response models ──────────────────────────────────────────────────────
 
 class Decision(str, Enum):
-    ALLOW = "ALLOW"
-    NOTIFY = "NOTIFY"
-    CHALLENGE = "CHALLENGE"
-    BLOCK = "BLOCK"
+    ALLOW = "ALLOW"      # risk 0-39
+    NOTIFY = "NOTIFY"    # risk 40-69
+    CHALLENGE = "CHALLENGE"  # risk 70-100
 
 
 class Severity(str, Enum):

@@ -126,7 +126,7 @@ export default function DemoTransfer() {
           {submitted && (
             <div className="mt-5 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800">
               <strong>Demo only:</strong> no real transfer was made. This is a
-              sandbox page used to demonstrate the Semak browser extension.
+              sandbox page used to demonstrate the ScamBusters browser extension.
             </div>
           )}
         </div>
@@ -134,7 +134,7 @@ export default function DemoTransfer() {
         <div className="mt-6 rounded-xl bg-slate-200/60 border border-slate-300 px-4 py-3 text-xs text-slate-600">
           <strong className="font-semibold text-slate-700">Demo notice.</strong>{" "}
           This page imitates a generic Malaysian online banking transfer screen
-          for the Semak extension demo. No real bank trademarks are used and no
+          for the ScamBusters extension demo. No real bank trademarks are used and no
           money will be moved.
         </div>
       </main>

@@ -1,4 +1,4 @@
-# Semak — Frontend
+# ScamBusters — Frontend
 
 React 19 + Vite + Tailwind. The single-page app that stitches together the three backend services ([`mule_check_api`](../mule_check_api/), [`layer3-behavioral-fraud`](../layer3-behavioral-fraud/), [`fraud_detect_api`](../fraud_detect_api/)) into one consumer-facing scam-check flow.
 
