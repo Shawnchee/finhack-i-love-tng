@@ -66,6 +66,10 @@ The final score is a **noisy-OR combination** of signal probabilities, so a sing
 
 Both services deploy to **AWS ECS Fargate** behind an **Application Load Balancer**. GitHub Actions builds, pushes to ECR, and deploys on every push to `main`.
 
+### Multi-Cloud Architecture
+
+![Multi-Cloud Architecture](docs/image/multi-cloud-architecture.png)
+
 ---
 
 ## Layer 3 — Behavioral Fraud Detection
